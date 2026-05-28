@@ -1,0 +1,103 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/theme.json",
+	"version": 2,
+	"settings": {
+		"appearanceTools": true,
+		"useRootPaddingAwareAlignments": true,
+		"layout": {
+			"contentSize": "760px",
+			"wideSize": "1240px"
+		},
+		"color": {
+			"defaultPalette": false,
+			"defaultGradients": false,
+			"custom": true,
+			"palette": [
+				{ "slug": "purple", "name": "Brand Purple", "color": "#6C5CE7" },
+				{ "slug": "purple-dark", "name": "Purple Dark", "color": "#4137A8" },
+				{ "slug": "purple-50", "name": "Purple 50", "color": "#F3F1FE" },
+				{ "slug": "green", "name": "Brand Green", "color": "#00C04B" },
+				{ "slug": "green-dark", "name": "Green Dark", "color": "#007C2F" },
+				{ "slug": "green-50", "name": "Green 50", "color": "#E8FAF0" },
+				{ "slug": "ink", "name": "Ink", "color": "#0D0F1A" },
+				{ "slug": "ink-700", "name": "Ink 700", "color": "#2E3245" },
+				{ "slug": "gray", "name": "Gray", "color": "#6B7280" },
+				{ "slug": "page", "name": "Page", "color": "#F0F2FF" },
+				{ "slug": "surface", "name": "Surface", "color": "#FFFFFF" },
+				{ "slug": "border", "name": "Border", "color": "#EDEFF8" }
+			],
+			"gradients": [
+				{ "slug": "purple-green", "name": "Purple to Green", "gradient": "linear-gradient(135deg, #6C5CE7 0%, #00C04B 100%)" },
+				{ "slug": "hero", "name": "Hero", "gradient": "linear-gradient(155deg, #F3F1FE 0%, #EEF0FF 55%, #E8FAF0 130%)" },
+				{ "slug": "ink", "name": "Ink", "gradient": "linear-gradient(145deg, #1A1659, #0D0F1A)" }
+			]
+		},
+		"typography": {
+			"fluid": true,
+			"fontFamilies": [
+				{
+					"slug": "display",
+					"name": "Display",
+					"fontFamily": "'Plus Jakarta Sans', system-ui, sans-serif",
+					"fontFace": [
+						{
+							"fontFamily": "Plus Jakarta Sans",
+							"fontWeight": "300 800",
+							"fontStyle": "normal",
+							"fontStretch": "normal",
+							"src": [ "https://fonts.gstatic.com" ]
+						}
+					]
+				},
+				{
+					"slug": "mono",
+					"name": "Mono",
+					"fontFamily": "'JetBrains Mono', 'Courier New', monospace"
+				}
+			],
+			"fontSizes": [
+				{ "slug": "small", "name": "Small", "size": "0.875rem" },
+				{ "slug": "medium", "name": "Medium", "size": "1rem" },
+				{ "slug": "large", "name": "Large", "size": "1.25rem" },
+				{ "slug": "x-large", "name": "XL", "size": "1.875rem" },
+				{ "slug": "xx-large", "name": "2XL", "size": "3rem" },
+				{ "slug": "huge", "name": "Huge", "size": "clamp(2.5rem, 5vw, 4.5rem)" }
+			]
+		},
+		"spacing": {
+			"units": [ "px", "em", "rem", "%", "vw", "vh" ],
+			"spacingScale": { "steps": 0 },
+			"spacingSizes": [
+				{ "slug": "20", "name": "1", "size": "0.5rem" },
+				{ "slug": "40", "name": "2", "size": "1rem" },
+				{ "slug": "60", "name": "3", "size": "1.5rem" },
+				{ "slug": "80", "name": "4", "size": "2rem" },
+				{ "slug": "100", "name": "5", "size": "3rem" },
+				{ "slug": "120", "name": "6", "size": "5rem" }
+			]
+		},
+		"border": { "radius": true, "color": true, "width": true }
+	},
+	"styles": {
+		"color": { "background": "var(--wp--preset--color--surface)", "text": "var(--wp--preset--color--ink-700)" },
+		"typography": {
+			"fontFamily": "var(--wp--preset--font-family--display)",
+			"fontSize": "1rem",
+			"lineHeight": "1.65"
+		},
+		"elements": {
+			"heading": { "typography": { "fontFamily": "var(--wp--preset--font-family--display)", "fontWeight": "800", "lineHeight": "1.15", "letterSpacing": "-0.03em" }, "color": { "text": "var(--wp--preset--color--ink)" } },
+			"link": { "color": { "text": "var(--wp--preset--color--purple)" }, ":hover": { "color": { "text": "var(--wp--preset--color--purple-dark)" } } },
+			"button": {
+				"border": { "radius": "9999px" },
+				"color": { "background": "var(--wp--preset--color--ink)", "text": "#ffffff" },
+				"typography": { "fontWeight": "600" },
+				"spacing": { "padding": { "top": "0.75rem", "bottom": "0.75rem", "left": "1.5rem", "right": "1.5rem" } }
+			}
+		}
+	},
+	"templateParts": [
+		{ "name": "header", "title": "Header", "area": "header" },
+		{ "name": "footer", "title": "Footer", "area": "footer" }
+	]
+}

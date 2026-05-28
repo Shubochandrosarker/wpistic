@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+vendor/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
+
+# Build caches (the committed build/ output is intentional — see docs)
+.vite/
+*.tmp
+
+# Local env
+.env
+.env.local

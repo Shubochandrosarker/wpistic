@@ -1,0 +1,18 @@
+/*
+Theme Name:        WPistic
+Theme URI:         https://wpistic.com/
+Author:            WPistic
+Author URI:        https://wpistic.com/
+Description:       Custom marketing theme for the WPistic SaaS platform. Built from the approved WPistic design system with design tokens, template parts, and clean separation from business logic (which lives in the WPistic plugins).
+Version:           1.0.0
+Requires at least: 6.4
+Tested up to:      6.7
+Requires PHP:      8.0
+License:           GPL-2.0-or-later
+License URI:       https://www.gnu.org/licenses/gpl-2.0.html
+Text Domain:       wpistic
+Tags:              custom-menu, featured-images, threaded-comments, translation-ready, full-site-editing
+*/
+
+/* Block/editor base styles are loaded via theme.json + assets/css/theme.css.
+   This file exists for the WordPress theme header and minimal resets only. */
