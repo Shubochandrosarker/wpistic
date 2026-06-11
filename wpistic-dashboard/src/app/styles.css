@@ -1,5 +1,6 @@
 /* WPistic dashboard app styles. Design tokens come from assets/tokens.css,
-   enqueued separately by PHP. */
+   enqueued separately by PHP. All themeable colors reference --app-* tokens
+   so the same rules serve both light and dark mode. */
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
 
@@ -7,8 +8,8 @@
 html, body, #wpistic-root { margin: 0; padding: 0; height: 100%; }
 body.wpistic-dashboard-body {
   font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
-  background: var(--bg-page, #F0F2FF);
-  color: var(--fg1, #0D0F1A);
+  background: var(--app-page, #F0F2FF);
+  color: var(--app-text, #0D0F1A);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
@@ -17,11 +18,14 @@ button, a, input, select, textarea { font-family: inherit; }
 button { cursor: pointer; }
 a { color: inherit; }
 
+/* Visible keyboard focus for accessibility (no outline on mouse focus). */
+:focus-visible { outline: 2px solid var(--app-accent, #6C5CE7); outline-offset: 2px; border-radius: 4px; }
+
 /* Scrollbars */
-.wpistic-scroll { scrollbar-width: thin; scrollbar-color: #D9DBF0 transparent; }
+.wpistic-scroll { scrollbar-width: thin; scrollbar-color: var(--app-scrollbar, #D9DBF0) transparent; }
 .wpistic-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
 .wpistic-scroll::-webkit-scrollbar-thumb {
-  background: #D9DBF0; border-radius: 9999px;
+  background: var(--app-scrollbar, #D9DBF0); border-radius: 9999px;
   border: 2px solid transparent; background-clip: padding-box;
 }
 .wpistic-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -31,13 +35,13 @@ a { color: inherit; }
   display: flex; align-items: center; gap: 12px;
   padding: 9px 12px; border-radius: 10px;
   font-size: 13.5px; font-weight: 500;
-  color: #4B5263; cursor: pointer; text-decoration: none;
+  color: var(--app-sidebar-item, #4B5263); cursor: pointer; text-decoration: none;
   transition: background 0.15s, color 0.15s; user-select: none;
   margin-bottom: 2px;
 }
-.wpistic-side-item:hover { background: #F3F1FE; color: #0D0F1A; }
-.wpistic-side-item:hover svg { color: #6C5CE7; }
-.wpistic-side-item svg { color: #6B7280; flex-shrink: 0; }
+.wpistic-side-item:hover { background: var(--app-sidebar-hover, #F3F1FE); color: var(--app-text, #0D0F1A); }
+.wpistic-side-item:hover svg { color: var(--app-accent, #6C5CE7); }
+.wpistic-side-item svg { color: var(--app-sidebar-icon, #6B7280); flex-shrink: 0; }
 .wpistic-side-item.active { background: #6C5CE7; color: #fff; box-shadow: 0 4px 14px rgba(108,92,231,0.28); }
 .wpistic-side-item.active svg { color: #fff; }
 
@@ -45,20 +49,20 @@ a { color: inherit; }
 table.wpistic-table thead th {
   text-align: left; font-size: 11px; font-weight: 700;
   letter-spacing: 0.1em; text-transform: uppercase;
-  color: #6B7280; padding: 14px 16px;
-  border-bottom: 1px solid #EDEFF8; background: #F8F9FF; white-space: nowrap;
+  color: var(--app-text-3, #6B7280); padding: 14px 16px;
+  border-bottom: 1px solid var(--app-border, #EDEFF8); background: var(--app-surface-2, #F8F9FF); white-space: nowrap;
 }
 table.wpistic-table tbody td {
-  padding: 16px; border-bottom: 1px solid #F0F2FF;
-  font-size: 13.5px; color: #2E3245; vertical-align: middle;
+  padding: 16px; border-bottom: 1px solid var(--app-border-3, #F0F2FF);
+  font-size: 13.5px; color: var(--app-text-2, #2E3245); vertical-align: middle;
 }
 table.wpistic-table tbody tr { transition: background 0.12s; }
-table.wpistic-table tbody tr:hover { background: #FBFBFF; }
+table.wpistic-table tbody tr:hover { background: var(--app-surface-inset, #FBFBFF); }
 table.wpistic-table tbody tr:last-child td { border-bottom: none; }
 
 /* Skeleton shimmer */
 .wpistic-skeleton {
-  background: linear-gradient(90deg, #EEF0FA 25%, #F6F7FC 37%, #EEF0FA 63%);
+  background: linear-gradient(90deg, var(--app-surface-3, #EEF0FA) 25%, var(--app-surface-2, #F6F7FC) 37%, var(--app-surface-3, #EEF0FA) 63%);
   background-size: 400% 100%;
   animation: wpistic-shimmer 1.4s ease infinite;
 }
@@ -68,4 +72,68 @@ table.wpistic-table tbody tr:last-child td { border-bottom: none; }
 .wpistic-fade-up { animation: wpistic-fade-up 0.32s ease-out both; }
 @keyframes wpistic-fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-code { font-family: 'JetBrains Mono', 'Courier New', monospace; background: #F3F1FE; color: #5649CC; padding: 0.15em 0.4em; border-radius: 6px; }
+code { font-family: 'JetBrains Mono', 'Courier New', monospace; background: var(--app-accent-soft, #F3F1FE); color: var(--app-accent-ink, #5649CC); padding: 0.15em 0.4em; border-radius: 6px; }
+
+/* ── Theme toggle ─────────────────────────────────────────────── */
+.wpistic-icon-btn {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: var(--app-surface-2, #F8F9FF); border: 1px solid var(--app-border, #EDEFF8);
+  display: grid; place-items: center; color: var(--app-sidebar-item, #4B5263);
+  cursor: pointer; flex-shrink: 0; transition: background 0.15s, color 0.15s, transform 0.15s;
+}
+.wpistic-icon-btn:hover { color: var(--app-accent, #6C5CE7); transform: translateY(-1px); }
+
+/* ── Page padding (responsive) ────────────────────────────────── */
+.wpistic-page { padding: 28px; }
+@media (max-width: 760px) { .wpistic-page { padding: 18px; } }
+@media (max-width: 480px) { .wpistic-page { padding: 14px; } }
+
+/* ── Responsive grid utilities ────────────────────────────────── */
+.wpt-grid { display: grid; gap: 18px; }
+.wpt-grid-4 { grid-template-columns: repeat(4, 1fr); }
+.wpt-grid-3 { grid-template-columns: repeat(3, 1fr); }
+.wpt-grid-2 { grid-template-columns: repeat(2, 1fr); }
+.wpt-split  { grid-template-columns: 1.6fr 1fr; }
+.wpt-split-billing { grid-template-columns: 1.4fr 1fr; }
+.wpt-split-dev { grid-template-columns: 1.5fr 1fr; }
+
+@media (max-width: 1100px) {
+  .wpt-grid-4 { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 900px) {
+  .wpt-grid-3 { grid-template-columns: repeat(2, 1fr); }
+  .wpt-split, .wpt-split-billing, .wpt-split-dev { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  .wpt-grid-4, .wpt-grid-3, .wpt-grid-2 { grid-template-columns: 1fr; }
+}
+
+/* ── Mobile sidebar drawer ────────────────────────────────────── */
+.wpistic-sidebar { width: 256px; flex-shrink: 0; }
+.wpistic-sidebar-backdrop { display: none; }
+.wpistic-menu-btn { display: none; }
+
+@media (max-width: 900px) {
+  .wpistic-menu-btn { display: grid; }
+  .wpistic-sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 60;
+    transform: translateX(-100%);
+    transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 24px 64px rgba(13,15,26,0.28);
+  }
+  .wpistic-app[data-sidebar-open="true"] .wpistic-sidebar { transform: translateX(0); }
+  .wpistic-app[data-sidebar-open="true"] .wpistic-sidebar-backdrop {
+    display: block; position: fixed; inset: 0; z-index: 55;
+    background: var(--app-overlay, rgba(13,15,26,0.45));
+    animation: wpistic-fade-in 0.2s ease;
+  }
+}
+@keyframes wpistic-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* Topbar search collapses on small screens. */
+@media (max-width: 760px) {
+  .wpistic-topbar-search { display: none !important; }
+}
+@media (max-width: 520px) {
+  .wpistic-topbar-username { display: none !important; }
+}

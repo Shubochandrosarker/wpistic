@@ -65,14 +65,14 @@ export default function Developers() {
           onDismiss={() => setFreshKey(null)} />
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 18, marginBottom: 22 }}>
+      <div className="wpt-grid wpt-split-dev" style={{ marginBottom: 22 }}>
         <Card>
           <SectionLabel>Create API key</SectionLabel>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <TextInput placeholder="Key label (e.g. Production server)" icon="code" value={label} onChange={setLabel} style={{ flex: 1 }} />
             <Btn variant="primary" leftIcon="plus" onClick={create} disabled={busy || !label}>Create</Btn>
           </div>
-          <p style={{ fontSize: 12.5, color: '#9499BA', marginTop: 12, lineHeight: 1.6 }}>
+          <p style={{ fontSize: 12.5, color: 'var(--app-text-3)', marginTop: 12, lineHeight: 1.6 }}>
             Keys are hashed at rest — we never store the raw value. Authenticate REST calls with the
             <code style={{ margin: '0 4px' }}>X-WPistic-Key</code> header.
           </p>
@@ -91,19 +91,19 @@ export default function Developers() {
       </div>
 
       <Card padding={0}>
-        <div style={{ padding: '18px 22px', borderBottom: '1px solid #F0F2FF' }}>
+        <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--app-border-3)' }}>
           <SectionLabel style={{ margin: 0 }}>Active keys</SectionLabel>
         </div>
         {keys.length === 0 ? (
           <EmptyState icon="code" title="No API keys yet" message="Create your first key above to start using the WPistic REST API." />
         ) : (
           keys.map((k) => (
-            <div key={k.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 22px', borderBottom: '1px solid #F0F2FF' }}>
-              <div style={{ width: 38, height: 38, borderRadius: 10, background: '#F3F1FE', color: '#6C5CE7', display: 'grid', placeItems: 'center' }}>
+            <div key={k.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 22px', borderBottom: '1px solid var(--app-border-3)' }}>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--app-accent-soft)', color: '#6C5CE7', display: 'grid', placeItems: 'center' }}>
                 <Icon name="key" size={17} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0D0F1A' }}>{k.label}</div>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--app-text)' }}>{k.label}</div>
                 <code style={{ fontSize: 12 }}>{k.prefix}••••••••</code>
               </div>
               {k.revoked ? <Badge tone="red">Revoked</Badge> : <Badge tone="green" dot>Active</Badge>}

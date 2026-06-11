@@ -27,12 +27,12 @@ export default function Downloads() {
       <div style={{ display: 'grid', gap: 14 }}>
         {downloads.map((d) => (
           <Card key={d.id || d.slug} style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: '#F3F1FE', color: '#6C5CE7', display: 'grid', placeItems: 'center' }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--app-accent-soft)', color: '#6C5CE7', display: 'grid', placeItems: 'center' }}>
               <Icon name="cube" size={20} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14.5, fontWeight: 700, color: '#0D0F1A' }}>{d.name || d.slug}</div>
-              <div style={{ fontSize: 12, color: '#9499BA', marginTop: 2 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--app-text)' }}>{d.name || d.slug}</div>
+              <div style={{ fontSize: 12, color: 'var(--app-text-4)', marginTop: 2 }}>
                 v{d.version || '—'} · {d.released_at || 'latest build'}
               </div>
             </div>

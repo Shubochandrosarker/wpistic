@@ -4,10 +4,10 @@ import { Card } from './atoms.jsx';
 import { Icon } from './Icon.jsx';
 
 export const PageWrap = ({ children, style = {} }) => (
-  <div style={{ padding: '28px', maxWidth: 1280, margin: '0 auto', ...style }}>{children}</div>
+  <div className="wpistic-page" style={{ maxWidth: 1280, margin: '0 auto', ...style }}>{children}</div>
 );
 
-export const StatCard = ({ label, value, delta, deltaTone, icon, iconBg = '#F3F1FE', iconColor = '#6C5CE7' }) => (
+export const StatCard = ({ label, value, delta, deltaTone, icon, iconBg = 'var(--app-accent-soft)', iconColor = '#6C5CE7' }) => (
   <Card padding={22} hoverable style={{ position: 'relative', overflow: 'hidden' }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
       <div style={{ width: 36, height: 36, borderRadius: 10, background: iconBg, color: iconColor, display: 'grid', placeItems: 'center' }}>
@@ -19,15 +19,15 @@ export const StatCard = ({ label, value, delta, deltaTone, icon, iconBg = '#F3F1
         </span>
       )}
     </div>
-    <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#6B7280' }}>{label}</div>
-    <div style={{ fontSize: 30, fontWeight: 800, color: '#0D0F1A', letterSpacing: '-0.025em', marginTop: 6, lineHeight: 1 }}>{value}</div>
+    <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--app-text-3)' }}>{label}</div>
+    <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--app-text)', letterSpacing: '-0.025em', marginTop: 6, lineHeight: 1 }}>{value}</div>
   </Card>
 );
 
 // Lightweight table matching the table.wpt styling from the approved UI.
 export const DataTable = ({ columns, rows, renderCell, empty }) => {
   if (!rows || rows.length === 0) {
-    return <div style={{ padding: 40, textAlign: 'center', color: '#6B7280', fontSize: 13.5 }}>{empty || 'Nothing here yet.'}</div>;
+    return <div style={{ padding: 40, textAlign: 'center', color: 'var(--app-text-3)', fontSize: 13.5 }}>{empty || 'Nothing here yet.'}</div>;
   }
   return (
     <div style={{ overflowX: 'auto' }}>

@@ -38,7 +38,7 @@ export default function Billing() {
         <TrialEndingBanner days={subscription.trial_days_left} onUpgrade={() => {}} />
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 18, marginBottom: 22 }}>
+      <div className="wpt-grid wpt-split-billing" style={{ marginBottom: 22 }}>
         <Card dark style={{ color: '#fff' }}>
           <Badge tone="green" dot>{subscription.plan_name || boot.plan?.name || 'Free'}</Badge>
           <div style={{ fontSize: 24, fontWeight: 800, marginTop: 12, letterSpacing: '-0.02em' }}>
@@ -56,7 +56,7 @@ export default function Billing() {
 
         <Card>
           <SectionLabel>Usage this period</SectionLabel>
-          <div style={{ fontSize: 13, color: '#4B5263', lineHeight: 2 }}>
+          <div style={{ fontSize: 13, color: 'var(--app-text-2)', lineHeight: 2 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Websites</span><strong>{subscription.usage?.websites ?? '—'}</strong></div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>API calls</span><strong>{subscription.usage?.api_calls ?? '—'}</strong></div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>AI runs</span><strong>{subscription.usage?.ai_runs ?? '—'}</strong></div>
@@ -65,7 +65,7 @@ export default function Billing() {
       </div>
 
       <Card padding={0}>
-        <div style={{ padding: '18px 22px', borderBottom: '1px solid #F0F2FF' }}>
+        <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--app-border-3)' }}>
           <SectionLabel style={{ margin: 0 }}>Invoices</SectionLabel>
         </div>
         <DataTable columns={columns} rows={invoices} renderCell={renderCell} empty="No invoices yet." />
