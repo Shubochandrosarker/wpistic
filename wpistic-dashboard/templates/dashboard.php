@@ -22,15 +22,27 @@ $wpistic_build_missing = ! wp_script_is( 'wpistic-dashboard', 'enqueued' )
 	<meta name="robots" content="noindex, nofollow" />
 	<title><?php echo esc_html__( 'Dashboard · WPistic', 'wpistic-dashboard' ); ?></title>
 	<link rel="icon" href="<?php echo esc_url( WPISTIC_DASH_URL . 'assets/logo-purple.png' ); ?>" />
+	<?php // No-flash theme init: resolves the saved preference (or the OS setting) and sets data-theme before first paint. ?>
+	<script>
+	(function () {
+		try {
+			var pref = localStorage.getItem('wpistic-theme') || 'system';
+			var dark = pref === 'dark' || (pref === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+			document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+		} catch (e) {
+			document.documentElement.setAttribute('data-theme', 'light');
+		}
+	})();
+	</script>
 	<?php wp_head(); ?>
 </head>
 <body class="wpistic-dashboard-body">
 	<div id="wpistic-root">
 		<?php // Server-rendered loading shell shown until the bundle boots. ?>
-		<div id="wpistic-boot-skeleton" style="position:fixed;inset:0;display:grid;place-items:center;background:#F0F2FF;font-family:'Plus Jakarta Sans',system-ui,sans-serif;">
+		<div id="wpistic-boot-skeleton" style="position:fixed;inset:0;display:grid;place-items:center;background:var(--app-page,#F0F2FF);font-family:'Plus Jakarta Sans',system-ui,sans-serif;">
 			<div style="display:flex;flex-direction:column;align-items:center;gap:16px;">
 				<img src="<?php echo esc_url( WPISTIC_DASH_URL . 'assets/logo-purple.png' ); ?>" alt="WPistic" width="44" height="44" style="animation:wpistic-pulse 1.4s ease-in-out infinite;" />
-				<div style="font-size:13px;color:#6B7280;font-weight:600;letter-spacing:.04em;">
+				<div style="font-size:13px;color:var(--app-text-3,#6B7280);font-weight:600;letter-spacing:.04em;">
 					<?php echo esc_html__( 'Loading your workspace…', 'wpistic-dashboard' ); ?>
 				</div>
 			</div>

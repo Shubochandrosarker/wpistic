@@ -78,6 +78,42 @@
   --interactive-secondary: var(--color-gray-800);
   --interactive-secondary-hover: var(--color-gray-700);
 
+  /* ── App surface system (themeable — light defaults) ──────────
+     These are the single source of truth for the dashboard chrome.
+     The [data-theme="dark"] block below flips every one of them, so
+     components only ever reference these vars (never raw hex). */
+  --app-page:        #F0F2FF;  /* main canvas behind cards            */
+  --app-surface:     #FFFFFF;  /* cards, sidebar, topbar              */
+  --app-surface-2:   #F8F9FF;  /* raised: inputs, table head, chips   */
+  --app-surface-3:   #F0F2FF;  /* sunken wells / hover rows           */
+  --app-surface-inset:#FBFBFF; /* table row hover                     */
+  --app-dark-card:   #13161F;  /* intentionally-dark promo cards      */
+
+  --app-text:        #0D0F1A;  /* primary text                        */
+  --app-text-2:      #2E3245;  /* body / table cells                  */
+  --app-text-3:      #6B7280;  /* muted labels                        */
+  --app-text-4:      #9499BA;  /* faint / timestamps                  */
+
+  --app-border:      #EDEFF8;  /* hairlines, card borders             */
+  --app-border-2:    #E8EAFF;  /* input borders                       */
+  --app-border-3:    #F0F2FF;  /* row dividers                        */
+
+  --app-accent:      #6C5CE7;
+  --app-accent-soft: #F3F1FE;  /* purple-tinted icon wells            */
+  --app-accent-ink:  #5649CC;
+
+  --app-sidebar:        #FFFFFF;
+  --app-sidebar-item:   #4B5263;
+  --app-sidebar-hover:  #F3F1FE;
+  --app-sidebar-icon:   #6B7280;
+
+  --app-scrollbar:   #D9DBF0;
+
+  --app-shadow-sm:   0 2px 12px rgba(108,92,231,0.05);
+  --app-shadow-md:   0 4px 16px rgba(108,92,231,0.12);
+  --app-shadow-lg:   0 16px 44px rgba(108,92,231,0.16);
+  --app-overlay:     rgba(13,15,26,0.45);
+
   /* ── Typography ──────────────────────────────────────────── */
   --font-display: 'Plus Jakarta Sans', sans-serif;
   --font-body: 'Plus Jakarta Sans', sans-serif;
@@ -141,7 +177,68 @@
   --shadow-lg:  0 8px 32px rgba(108, 92, 231, 0.16), 0 4px 12px rgba(0,0,0,0.08);
   --shadow-xl:  0 16px 48px rgba(108, 92, 231, 0.20), 0 8px 24px rgba(0,0,0,0.10);
   --shadow-glow: 0 0 24px rgba(108, 92, 231, 0.35);
+
+  color-scheme: light;
 }
+
+/* ── Dark theme ───────────────────────────────────────────────
+   Activated by setting data-theme="dark" on <html> (handled by the
+   no-flash boot script + the in-app theme toggle). Only the app
+   surface tokens flip; brand hues stay constant. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --app-page:        #0B0D14;
+  --app-surface:     #13161F;
+  --app-surface-2:   #1A1E2A;
+  --app-surface-3:   #1E2230;
+  --app-surface-inset:#191D28;
+  --app-dark-card:   #1A1E2A;
+
+  --app-text:        #F4F5FB;
+  --app-text-2:      #C7CBDA;
+  --app-text-3:      #9499BA;
+  --app-text-4:      #6E7392;
+
+  --app-border:      #262B3A;
+  --app-border-2:    #2C3142;
+  --app-border-3:    #232838;
+
+  --app-accent:      #8E78F2;
+  --app-accent-soft: #221E3C;
+  --app-accent-ink:  #B09EF7;
+
+  --app-sidebar:        #0F121A;
+  --app-sidebar-item:   #A9AECB;
+  --app-sidebar-hover:  #1C2030;
+  --app-sidebar-icon:   #8388AD;
+
+  --app-scrollbar:   #2C3142;
+
+  --app-shadow-sm:   0 2px 12px rgba(0,0,0,0.40);
+  --app-shadow-md:   0 4px 16px rgba(0,0,0,0.50);
+  --app-shadow-lg:   0 16px 44px rgba(0,0,0,0.55);
+  --app-overlay:     rgba(0,0,0,0.62);
+
+  /* Re-point the legacy semantic vars so anything still using them
+     (theme.json bridge, type styles) follows the dark palette. */
+  --fg1: var(--app-text);
+  --fg2: var(--app-text-2);
+  --fg3: var(--app-text-3);
+  --bg-page: var(--app-page);
+  --bg-surface: var(--app-surface);
+  --bg-surface-raised: var(--app-surface-2);
+}
+
+/* Smooth the flip without animating layout. */
+.wpistic-dashboard-body,
+.wpistic-dashboard-body * {
+  transition-property: background-color, border-color, color, box-shadow, fill, stroke;
+  transition-duration: 0.18s;
+  transition-timing-function: ease;
+}
+/* Never animate the icon morph or active-nav pill on first paint. */
+.wpistic-no-transitions, .wpistic-no-transitions * { transition: none !important; }
 
 /* ── Semantic Type Styles ─────────────────────────────────── */
 h1, .h1 {

@@ -60,30 +60,30 @@ export default function DashboardHome() {
     <PageWrap>
       {banners}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginBottom: 22 }}>
+      <div className="wpt-grid wpt-grid-4" style={{ marginBottom: 22 }}>
         <StatCard label="Active licenses" value={stats.licenses ?? 0} icon="key" />
         <StatCard label="Connected sites" value={stats.websites ?? 0} icon="globe" iconBg="#E8FAF0" iconColor="#007C2F" />
         <StatCard label="Need attention" value={stats.licenses_attn ?? 0} icon="warn" iconBg="#FEF3C7" iconColor="#92400E" />
         <StatCard label="Plan" value={boot.plan?.name || 'Free'} icon="card" iconBg="#DBEAFE" iconColor="#1E40AF" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 18 }}>
+      <div className="wpt-grid wpt-split">
         <Card>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <SectionLabel style={{ margin: 0 }}>Recent activity</SectionLabel>
             <Btn variant="ghost-gray" size="xs" leftIcon="refresh" onClick={reload}>Refresh</Btn>
           </div>
           {activity.length === 0 ? (
-            <div style={{ padding: '28px 0', textAlign: 'center', color: '#6B7280', fontSize: 13 }}>No activity yet.</div>
+            <div style={{ padding: '28px 0', textAlign: 'center', color: 'var(--app-text-3)', fontSize: 13 }}>No activity yet.</div>
           ) : (
             activity.map((a) => (
-              <div key={a.id} style={{ display: 'flex', gap: 12, padding: '12px 0', borderBottom: '1px solid #F0F2FF' }}>
-                <div style={{ width: 32, height: 32, borderRadius: 9, background: '#F3F1FE', color: '#6C5CE7', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+              <div key={a.id} style={{ display: 'flex', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--app-border-3)' }}>
+                <div style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--app-accent-soft)', color: '#6C5CE7', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
                   <Icon name="spark" size={15} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, color: '#2E3245', fontWeight: 500 }}>{a.message || a.event_type}</div>
-                  <div style={{ fontSize: 11.5, color: '#9499BA', marginTop: 2 }}>{a.created_at}</div>
+                  <div style={{ fontSize: 13, color: 'var(--app-text-2)', fontWeight: 500 }}>{a.message || a.event_type}</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--app-text-4)', marginTop: 2 }}>{a.created_at}</div>
                 </div>
               </div>
             ))

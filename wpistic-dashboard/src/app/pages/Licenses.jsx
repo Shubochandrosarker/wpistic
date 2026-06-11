@@ -49,7 +49,7 @@ export default function Licenses() {
   const renderCell = (key, row) => {
     switch (key) {
       case 'product':
-        return <span style={{ fontWeight: 700, color: '#0D0F1A', textTransform: 'capitalize' }}>{row.product}</span>;
+        return <span style={{ fontWeight: 700, color: 'var(--app-text)', textTransform: 'capitalize' }}>{row.product}</span>;
       case 'status':
         return <Badge tone={STATUS_TONE[row.status] || 'gray'} dot>{row.status}</Badge>;
       case 'domain':

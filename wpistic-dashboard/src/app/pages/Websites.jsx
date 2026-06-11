@@ -59,7 +59,7 @@ export default function Websites() {
 
       {canManage && (
         <Card style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 14.5, fontWeight: 700, color: '#0D0F1A', marginBottom: 12 }}>Connect a website</div>
+          <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--app-text)', marginBottom: 12 }}>Connect a website</div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <TextInput placeholder="https://yoursite.com" icon="globe" value={url} onChange={setUrl} style={{ flex: 1, minWidth: 220 }} />
             <TextInput placeholder="Friendly name (optional)" value={name} onChange={setName} style={{ width: 220 }} />
@@ -79,8 +79,8 @@ export default function Websites() {
                 <Icon name="globe" size={20} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14.5, fontWeight: 700, color: '#0D0F1A' }}>{w.name}</div>
-                <div style={{ fontSize: 12, color: '#9499BA', marginTop: 2 }}>{w.url}</div>
+                <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--app-text)' }}>{w.name}</div>
+                <div style={{ fontSize: 12, color: 'var(--app-text-4)', marginTop: 2 }}>{w.url}</div>
               </div>
               <Badge tone={STATUS_TONE[w.status] || 'gray'} dot>{w.status}</Badge>
               {canManage && <Btn variant="ghost-gray" size="xs" onClick={() => disconnect(w.id)}>Disconnect</Btn>}

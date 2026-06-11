@@ -12,14 +12,14 @@ const CHANNELS = [
 export default function Support() {
   return (
     <PageWrap>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 18 }}>
+      <div className="wpt-grid wpt-grid-3">
         {CHANNELS.map((c) => (
           <Card key={c.title} hoverable>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: '#F3F1FE', color: '#6C5CE7', display: 'grid', placeItems: 'center', marginBottom: 14 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--app-accent-soft)', color: '#6C5CE7', display: 'grid', placeItems: 'center', marginBottom: 14 }}>
               <Icon name={c.icon} size={20} />
             </div>
-            <div style={{ fontSize: 15.5, fontWeight: 700, color: '#0D0F1A' }}>{c.title}</div>
-            <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, margin: '8px 0 16px' }}>{c.desc}</p>
+            <div style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--app-text)' }}>{c.title}</div>
+            <p style={{ fontSize: 13, color: 'var(--app-text-3)', lineHeight: 1.6, margin: '8px 0 16px' }}>{c.desc}</p>
             <Btn variant="border-card" size="sm" rightIcon="arrow" style={{ width: '100%' }}
               onClick={() => { window.location.href = (boot.homeUrl || '/') + c.href; }}>
               {c.cta}
@@ -30,7 +30,7 @@ export default function Support() {
 
       <Card style={{ marginTop: 18 }}>
         <SectionLabel>Your open tickets</SectionLabel>
-        <div style={{ padding: '28px 0', textAlign: 'center', color: '#6B7280', fontSize: 13 }}>
+        <div style={{ padding: '28px 0', textAlign: 'center', color: 'var(--app-text-3)', fontSize: 13 }}>
           You have no open tickets. 🎉
         </div>
       </Card>

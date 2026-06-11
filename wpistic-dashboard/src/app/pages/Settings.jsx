@@ -4,9 +4,9 @@ import { Card, Btn, Badge, SectionLabel } from '../components/atoms.jsx';
 
 function Row({ label, value }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #F0F2FF' }}>
-      <span style={{ fontSize: 13, color: '#6B7280' }}>{label}</span>
-      <span style={{ fontSize: 13.5, fontWeight: 600, color: '#0D0F1A' }}>{value || '—'}</span>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid var(--app-border-3)' }}>
+      <span style={{ fontSize: 13, color: 'var(--app-text-3)' }}>{label}</span>
+      <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--app-text)' }}>{value || '—'}</span>
     </div>
   );
 }
@@ -16,7 +16,7 @@ export default function Settings() {
   const ws = boot.workspace;
   return (
     <PageWrap>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
+      <div className="wpt-grid wpt-grid-2">
         <Card>
           <SectionLabel>Profile</SectionLabel>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
@@ -24,8 +24,8 @@ export default function Settings() {
               {u.avatar ? <img src={u.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : u.initials}
             </div>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#0D0F1A' }}>{u.name}</div>
-              <div style={{ fontSize: 12.5, color: '#9499BA' }}>{u.email}</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--app-text)' }}>{u.name}</div>
+              <div style={{ fontSize: 12.5, color: 'var(--app-text-4)' }}>{u.email}</div>
             </div>
           </div>
           <Row label="Roles" value={(u.roles || []).join(', ')} />
@@ -41,7 +41,7 @@ export default function Settings() {
 
         <Card>
           <SectionLabel>Security</SectionLabel>
-          <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6 }}>
+          <p style={{ fontSize: 13, color: 'var(--app-text-3)', lineHeight: 1.6 }}>
             Password and two-factor authentication are managed in your account profile.
           </p>
           <Btn variant="border-card" size="sm" style={{ marginTop: 8 }} onClick={() => window.open(boot.homeUrl + 'wp-admin/profile.php', '_blank', 'noopener')}>
@@ -51,7 +51,7 @@ export default function Settings() {
 
         <Card>
           <SectionLabel>Session</SectionLabel>
-          <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6 }}>Sign out of the WPistic dashboard.</p>
+          <p style={{ fontSize: 13, color: 'var(--app-text-3)', lineHeight: 1.6 }}>Sign out of the WPistic dashboard.</p>
           <Btn variant="danger" size="sm" leftIcon="logout" style={{ marginTop: 8 }} onClick={() => { window.location.href = boot.logoutUrl; }}>
             Sign out
           </Btn>

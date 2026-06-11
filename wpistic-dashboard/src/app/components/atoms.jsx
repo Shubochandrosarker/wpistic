@@ -32,12 +32,12 @@ export const Btn = ({
     secondary: { background: hov ? '#1A1E2E' : '#0D0F1A', color: '#fff' },
     outline: { background: hov ? '#F3F1FE' : 'transparent', color: '#6C5CE7', border: '1.5px solid #6C5CE7' },
     ghost: { background: hov ? '#F3F1FE' : 'transparent', color: '#6C5CE7' },
-    'ghost-gray': { background: hov ? '#F0F2FF' : 'transparent', color: '#4B5263' },
-    soft: { background: hov ? '#E9E6FD' : '#F3F1FE', color: '#5649CC' },
+    'ghost-gray': { background: hov ? 'var(--app-surface-3)' : 'transparent', color: 'var(--app-text-2)' },
+    soft: { background: hov ? '#E9E6FD' : 'var(--app-accent-soft)', color: 'var(--app-accent-ink)' },
     white: { background: '#fff', color: '#6C5CE7', boxShadow: '0 2px 12px rgba(0,0,0,0.10)' },
     green: { background: hov ? '#009E3D' : '#00C04B', color: '#fff', boxShadow: hov ? '0 6px 24px rgba(0,192,75,0.40)' : '0 2px 10px rgba(0,192,75,0.25)' },
     'dark-outline': { background: hov ? 'rgba(255,255,255,0.05)' : 'transparent', color: 'rgba(255,255,255,0.92)', border: '1.5px solid rgba(255,255,255,0.22)' },
-    'border-card': { background: hov ? '#F8F9FF' : '#fff', color: '#0D0F1A', border: '1px solid #E8EAFF' },
+    'border-card': { background: hov ? 'var(--app-surface-2)' : 'var(--app-surface)', color: 'var(--app-text)', border: '1px solid var(--app-border-2)' },
     danger: { background: hov ? '#DC2626' : '#EF4444', color: '#fff' },
   };
   return (
@@ -88,10 +88,10 @@ export const Card = ({ children, style = {}, padding = 24, dark = false, hoverab
       onMouseEnter={() => hoverable && setHov(true)}
       onMouseLeave={() => hoverable && setHov(false)}
       style={{
-        background: dark ? '#13161F' : '#fff',
+        background: dark ? 'var(--app-dark-card)' : 'var(--app-surface)',
         borderRadius: 20,
-        border: dark ? '1px solid #1E2130' : '1px solid #EDEFF8',
-        boxShadow: hoverable && hov ? '0 16px 44px rgba(108,92,231,0.16)' : '0 2px 12px rgba(108,92,231,0.05)',
+        border: dark ? '1px solid var(--app-border-2)' : '1px solid var(--app-border)',
+        boxShadow: hoverable && hov ? 'var(--app-shadow-lg)' : 'var(--app-shadow-sm)',
         transition: 'all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1)',
         transform: hoverable && hov ? 'translateY(-3px)' : 'translateY(0)',
         padding, ...style,
@@ -119,7 +119,7 @@ export const Logo = ({ variant = 'purple', size = 28, showText = true, dark = fa
         ? <img src={src} alt="WPistic" style={{ width: size, height: size, objectFit: 'contain' }} />
         : <span style={{ width: size, height: size, borderRadius: 8, background: '#6C5CE7', display: 'inline-block' }} />}
       {showText && (
-        <span style={{ fontSize: size * 0.6 + 1, fontWeight: 800, color: dark ? '#fff' : '#0D0F1A', letterSpacing: '-0.03em' }}>
+        <span style={{ fontSize: size * 0.6 + 1, fontWeight: 800, color: dark ? '#fff' : 'var(--app-text)', letterSpacing: '-0.03em' }}>
           WPistic
         </span>
       )}
@@ -133,12 +133,12 @@ export const TextInput = ({ value, onChange, placeholder, icon, style = {}, size
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 9, height: h, padding: '0 14px',
-      borderRadius: 9999, background: '#fff',
-      border: focused ? '1.5px solid #6C5CE7' : '1.5px solid #E8EAFF',
+      borderRadius: 9999, background: 'var(--app-surface)',
+      border: focused ? '1.5px solid #6C5CE7' : '1.5px solid var(--app-border-2)',
       transition: 'border-color 0.15s, box-shadow 0.15s',
       boxShadow: focused ? '0 0 0 4px rgba(108,92,231,0.10)' : 'none', ...style,
     }}>
-      {icon && <Icon name={icon} size={15} color="#9499BA" />}
+      {icon && <Icon name={icon} size={15} color="var(--app-text-4)" />}
       <input
         value={value || ''}
         type={type}
@@ -146,7 +146,7 @@ export const TextInput = ({ value, onChange, placeholder, icon, style = {}, size
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         placeholder={placeholder}
-        style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13.5, color: '#0D0F1A', fontFamily: 'inherit' }}
+        style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13.5, color: 'var(--app-text)', fontFamily: 'inherit' }}
       />
     </div>
   );

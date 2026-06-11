@@ -31,7 +31,7 @@ export const SkeletonGrid = ({ count = 4, columns = 4 }) => (
 export const SkeletonRows = ({ count = 5 }) => (
   <Card padding={0}>
     {Array.from({ length: count }).map((_, i) => (
-      <div key={i} style={{ display: 'flex', gap: 14, padding: 18, borderBottom: i < count - 1 ? '1px solid #F0F2FF' : 'none' }}>
+      <div key={i} style={{ display: 'flex', gap: 14, padding: 18, borderBottom: i < count - 1 ? '1px solid var(--app-border-3)' : 'none' }}>
         <Skeleton w={40} h={40} r={12} />
         <div style={{ flex: 1 }}>
           <Skeleton w="30%" h={12} />
@@ -45,10 +45,10 @@ export const SkeletonRows = ({ count = 5 }) => (
 // ── Empty state ──────────────────────────────────────────────
 export const EmptyState = ({ icon = 'cube', title, message, action }) => (
   <Card padding={48} style={{ textAlign: 'center' }}>
-    <div style={{ width: 56, height: 56, borderRadius: 16, margin: '0 auto 18px', background: '#F3F1FE', color: '#6C5CE7', display: 'grid', placeItems: 'center' }}>
+    <div style={{ width: 56, height: 56, borderRadius: 16, margin: '0 auto 18px', background: 'var(--app-accent-soft)', color: '#6C5CE7', display: 'grid', placeItems: 'center' }}>
       <Icon name={icon} size={26} />
     </div>
-    <div style={{ fontSize: 18, fontWeight: 700, color: '#0D0F1A' }}>{title}</div>
+    <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--app-text)' }}>{title}</div>
     {message && <p style={{ fontSize: 13.5, color: '#6B7280', maxWidth: 420, margin: '8px auto 0', lineHeight: 1.6 }}>{message}</p>}
     {action && <div style={{ marginTop: 22 }}>{action}</div>}
   </Card>
@@ -60,8 +60,8 @@ export const ErrorState = ({ error, onRetry }) => (
     <div style={{ width: 56, height: 56, borderRadius: 16, margin: '0 auto 18px', background: '#FEE2E2', color: '#EF4444', display: 'grid', placeItems: 'center' }}>
       <Icon name="warn" size={26} />
     </div>
-    <div style={{ fontSize: 18, fontWeight: 700, color: '#0D0F1A' }}>Something went wrong</div>
-    <p style={{ fontSize: 13.5, color: '#6B7280', maxWidth: 420, margin: '8px auto 0', lineHeight: 1.6 }}>
+    <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--app-text)' }}>Something went wrong</div>
+    <p style={{ fontSize: 13.5, color: 'var(--app-text-3)', maxWidth: 420, margin: '8px auto 0', lineHeight: 1.6 }}>
       {error?.message || 'We couldn’t load this right now.'}
     </p>
     {onRetry && <div style={{ marginTop: 22 }}><Btn variant="outline" size="sm" leftIcon="refresh" onClick={onRetry}>Try again</Btn></div>}

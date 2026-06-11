@@ -25,21 +25,21 @@ export default function Products() {
       {products.length === 0 ? (
         <EmptyState icon="cube" title="No products found" message="Try a different search term." />
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 18 }}>
+        <div className="wpt-grid wpt-grid-3">
           {products.map((p) => (
             <Card key={p.id} hoverable>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
                 <ProductGlyph category={p.category} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 15.5, fontWeight: 700, color: '#0D0F1A' }}>{p.name}</span>
+                    <span style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--app-text)' }}>{p.name}</span>
                     {p.flagship && <Badge tone="purple">Flagship</Badge>}
                   </div>
-                  <div style={{ fontSize: 12, color: '#9499BA', marginTop: 2 }}>{p.category}</div>
+                  <div style={{ fontSize: 12, color: 'var(--app-text-4)', marginTop: 2 }}>{p.category}</div>
                 </div>
                 <Badge tone={STATUS_TONE[p.status] || 'gray'} dot>{p.status}</Badge>
               </div>
-              <p style={{ fontSize: 13, color: '#4B5263', lineHeight: 1.6, margin: '14px 0 16px' }}>{p.tagline}</p>
+              <p style={{ fontSize: 13, color: 'var(--app-text-2)', lineHeight: 1.6, margin: '14px 0 16px' }}>{p.tagline}</p>
               <Btn variant="border-card" size="sm" rightIcon="arrow" style={{ width: '100%' }}>Open product</Btn>
             </Card>
           ))}
