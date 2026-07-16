@@ -1,0 +1,32 @@
+name: licenseistic-memberistic-addon tests
+
+on:
+  push:
+    paths:
+      - 'licenseistic-memberistic-addon/**'
+      - '.github/workflows/licenseistic-memberistic-addon-tests.yml'
+  pull_request:
+    paths:
+      - 'licenseistic-memberistic-addon/**'
+      - '.github/workflows/licenseistic-memberistic-addon-tests.yml'
+
+jobs:
+  phpunit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: licenseistic-memberistic-addon
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Run PHPUnit
+        run: vendor/bin/phpunit
