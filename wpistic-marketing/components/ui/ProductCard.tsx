@@ -13,13 +13,17 @@ export function ProductCard({ product }: { product: Product }) {
       <div className="flex items-start gap-3.5">
         <ProductGlyph category={product.category} icon={product.icon} />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-[15.5px] font-bold text-ink-900">{product.name}</span>
-            {product.flagship && <Badge tone="purple">Flagship</Badge>}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="truncate text-[15.5px] font-bold text-ink-900">{product.name}</span>
+            {product.flagship && (
+              <Badge tone="purple" className="shrink-0">
+                Flagship
+              </Badge>
+            )}
           </div>
           <div className="mt-0.5 text-xs text-ink-400">{product.category}</div>
         </div>
-        <Badge tone={STATUS_TONE[product.status]} dot>
+        <Badge tone={STATUS_TONE[product.status]} dot className="shrink-0">
           {product.status}
         </Badge>
       </div>
