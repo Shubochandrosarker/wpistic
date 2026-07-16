@@ -1,0 +1,33 @@
+name: wpistic-dashboard tests
+
+on:
+  push:
+    paths:
+      - 'wpistic-dashboard/**'
+      - '.github/workflows/wpistic-dashboard-tests.yml'
+  pull_request:
+    paths:
+      - 'wpistic-dashboard/**'
+      - '.github/workflows/wpistic-dashboard-tests.yml'
+
+jobs:
+  vitest:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wpistic-dashboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: wpistic-dashboard/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test

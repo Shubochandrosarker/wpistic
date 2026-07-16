@@ -26,11 +26,11 @@ export default function App() {
             <Route path="licenses" element={<Licenses />} />
             <Route path="downloads" element={<Downloads />} />
             <Route path="websites" element={<Websites />} />
-            <Route path="agents" element={<ModulePage icon="bot" title="AI Agents" description="Drop-in AI agents for support, sales, SEO, and operations." />} />
-            <Route path="automations" element={<ModulePage icon="zap" title="Automations" description="When-this-then-that workflows across your WPistic plugins." />} />
-            <Route path="crm" element={<ModulePage icon="users" title="CRM" description="Contacts, deals, and timelines synced across every channel." />} />
-            <Route path="inbox" element={<ModulePage icon="inbox" title="Inbox" description="Unified WhatsApp, web chat, email, and support tickets." />} />
-            <Route path="analytics" element={<ModulePage icon="chart" title="Analytics" description="Traffic, revenue, and AI usage across all your sites." />} />
+            <Route path="agents" element={<ModulePage module="agents" icon="bot" title="AI Agents" description="Drop-in AI agents for support, sales, SEO, and operations." />} />
+            <Route path="automations" element={<ModulePage module="automations" icon="zap" title="Automations" description="When-this-then-that workflows across your WPistic plugins." />} />
+            <Route path="crm" element={<ModulePage module="crm" icon="users" title="CRM" description="Contacts, deals, and timelines synced across every channel." />} />
+            <Route path="inbox" element={<ModulePage module="inbox" icon="inbox" title="Inbox" description="Unified WhatsApp, web chat, email, and support tickets." />} />
+            <Route path="analytics" element={<ModulePage module="analytics" icon="chart" title="Analytics" description="Traffic, revenue, and AI usage across all your sites." />} />
             <Route path="billing" element={<Billing />} />
             <Route path="support" element={<Support />} />
             <Route path="developers" element={<Developers />} />

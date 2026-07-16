@@ -20,4 +20,9 @@ export default defineConfig({
       input: resolve(__dirname, 'src/app/main.jsx'),
     },
   },
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.js'],
+    globals: false,
+  },
 });
