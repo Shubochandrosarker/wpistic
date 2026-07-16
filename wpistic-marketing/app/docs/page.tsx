@@ -64,7 +64,7 @@ export default function DocsPage() {
             </h1>
             <p className="mt-6 text-lg leading-relaxed text-ink-600">
               Guides for installing products, managing workspaces, and integrating with the REST
-              API — organized by what you're trying to do.
+              API — organized by what you&apos;re trying to do.
             </p>
           </div>
 
@@ -117,10 +117,10 @@ export default function DocsPage() {
       <Section>
         <Container className="text-center">
           <h2 className="font-display mx-auto max-w-xl text-3xl font-extrabold tracking-tight text-balance text-ink-900 sm:text-4xl">
-            Can't find what you need?
+            Can&apos;t find what you need?
           </h2>
           <p className="mx-auto mt-4 max-w-md text-lg text-ink-600">
-            Our support team can point you to the right guide, or help directly if something isn't
+            Our support team can point you to the right guide, or help directly if something isn&apos;t
             working.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">

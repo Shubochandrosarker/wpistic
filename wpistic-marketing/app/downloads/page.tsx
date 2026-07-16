@@ -27,7 +27,7 @@ export default function DownloadsPage() {
             description="WPistic products are licensed WordPress plugins, not free downloads — installing one requires an active WPistic account. Sign into your dashboard to grab the plugin zip and your license key at the same time."
           />
           <p className="mt-4 text-[14.5px] text-ink-500">
-            Don't have an account yet?{" "}
+            Don&apos;t have an account yet?{" "}
             <a href="/pricing" className="font-semibold text-purple-600 hover:text-purple-700">
               See plans and start a free trial
             </a>

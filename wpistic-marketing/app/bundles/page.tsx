@@ -102,7 +102,7 @@ export default function BundlesPage() {
       <Section>
         <Container className="text-center">
           <h2 className="font-display text-3xl font-extrabold tracking-tight text-ink-900 sm:text-4xl">
-            Need a bundle we don't list?
+            Need a bundle we don&apos;t list?
           </h2>
           <p className="mx-auto mt-3 max-w-lg text-ink-600">
             See full plan details and monthly pricing, or talk to us about a custom bundle for

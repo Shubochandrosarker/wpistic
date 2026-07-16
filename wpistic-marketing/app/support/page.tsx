@@ -76,7 +76,7 @@ export default function SupportPage() {
           <div className="max-w-2xl">
             <Eyebrow>Support</Eyebrow>
             <h1 className="font-display mt-4 text-4xl font-extrabold tracking-tight text-balance text-ink-900 sm:text-5xl">
-              We're here when something doesn't work
+              We&apos;re here when something doesn&apos;t work
             </h1>
             <p className="mt-6 text-lg leading-relaxed text-ink-600">
               Start with the docs for how things are supposed to work, then reach out directly when
@@ -123,7 +123,7 @@ export default function SupportPage() {
             Still stuck?
           </h2>
           <p className="mx-auto mt-4 max-w-md text-lg text-ink-600">
-            Reach out and tell us what's going on — we'll point you in the right direction.
+            Reach out and tell us what&apos;s going on — we&apos;ll point you in the right direction.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <Button href="/contact" variant="green" size="lg" icon="arrow">

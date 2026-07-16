@@ -96,7 +96,7 @@ export default function SolutionsPage() {
             Not sure which products fit your setup?
           </h2>
           <p className="mx-auto mt-3 max-w-lg text-ink-600">
-            Talk to us about your stack and we'll point you at the right starting products — or
+            Talk to us about your stack and we&apos;ll point you at the right starting products — or
             browse the full suite yourself.
           </p>
           <div className="mt-7 flex flex-wrap justify-center gap-3">
