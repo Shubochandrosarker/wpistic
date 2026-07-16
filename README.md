@@ -13,7 +13,9 @@ clean integration points.
 | `wpistic-dashboard/` | Mounts the React app at `/dashboard` with client-side routing; enqueues its Vite bundle only on dashboard routes; localizes the `wpisticBoot` object. |
 | `licenseistic-memberistic-addon/` | Event bridge: maps Memberistic subscription lifecycle → Licenseistic entitlements. |
 | `wpistic-theme/` | Custom marketing theme (public site) built from the design tokens, with `theme.json`, template parts, and page templates. |
+| `wpistic-marketing/` | Standalone Next.js marketing site for `www.wpistic.com` — full replacement in progress for `wpistic-theme`. |
 | `docs/ARCHITECTURE.md` | Deeper architecture notes, REST contract, and extension points. |
+| `docs/SETUP.md` | Step-by-step local setup for both the WordPress app and the `wpistic-marketing` front end. |
 
 ## Install
 
