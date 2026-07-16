@@ -20,3 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 if ( ! defined( 'LOGGED_IN_COOKIE' ) ) {
 	define( 'LOGGED_IN_COOKIE', 'wordpress_logged_in' );
 }
+
+if ( ! defined( 'ARRAY_A' ) ) {
+	define( 'ARRAY_A', 'ARRAY_A' );
+}
