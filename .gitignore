@@ -12,6 +12,7 @@ Thumbs.db
 # Build caches (the committed build/ output is intentional — see docs)
 .vite/
 *.tmp
+.phpunit.cache/
 
 # Local env
 .env
