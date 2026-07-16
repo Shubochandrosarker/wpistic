@@ -21,6 +21,10 @@ final class FakeWpdb {
 
 	private int $next_id = 1;
 
+	public function get_charset_collate(): string {
+		return 'DEFAULT CHARACTER SET utf8mb4';
+	}
+
 	/**
 	 * Nullable columns per table that a real MySQL row would report as
 	 * NULL when not supplied — WPistic's service hydrate() methods read

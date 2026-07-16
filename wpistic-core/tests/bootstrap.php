@@ -15,7 +15,9 @@ require_once __DIR__ . '/stubs/wp-rest-request.php';
 require_once __DIR__ . '/stubs/wp-rest-response.php';
 
 if ( ! defined( 'ABSPATH' ) ) {
-	define( 'ABSPATH', sys_get_temp_dir() . '/' );
+	// Points at tests/fixtures/wp-root/, which carries a stub
+	// wp-admin/includes/upgrade.php so Schema::install() can require it.
+	define( 'ABSPATH', __DIR__ . '/fixtures/wp-root/' );
 }
 
 if ( ! defined( 'LOGGED_IN_COOKIE' ) ) {
