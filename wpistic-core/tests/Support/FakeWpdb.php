@@ -29,8 +29,9 @@ final class FakeWpdb {
 	 * @var array<string,array<int,string>>
 	 */
 	private array $nullable_defaults = array(
-		'wpistic_websites' => array( 'name', 'connector_version', 'token_hash', 'last_seen_at', 'meta' ),
-		'wpistic_api_keys' => array( 'scopes', 'last_used_at', 'revoked_at' ),
+		'wpistic_websites'     => array( 'name', 'connector_version', 'token_hash', 'last_seen_at', 'meta' ),
+		'wpistic_api_keys'     => array( 'scopes', 'last_used_at', 'revoked_at' ),
+		'wpistic_activity_log' => array( 'user_id', 'object_type', 'object_id', 'message', 'context' ),
 	);
 
 	/**
@@ -154,6 +155,20 @@ final class FakeWpdb {
 		$api_keys   = $this->prefix . 'wpistic_api_keys';
 		$workspaces = $this->prefix . 'wpistic_workspaces';
 		$members    = $this->prefix . 'wpistic_workspace_members';
+		$activity   = $this->prefix . 'wpistic_activity_log';
+
+		// ActivityService::recent.
+		if ( str_contains( $query, $activity ) && str_contains( $query, 'workspace_id' ) ) {
+			[$workspace_id, $limit] = $args;
+			$rows                   = array_values(
+				array_filter(
+					$this->tables[ $activity ] ?? array(),
+					static fn( $r ) => (int) $r['workspace_id'] === (int) $workspace_id
+				)
+			);
+			usort( $rows, static fn( $a, $b ) => strcmp( $b['created_at'], $a['created_at'] ) );
+			return array_slice( $rows, 0, $limit );
+		}
 
 		// WorkspaceService::get_for_user — join workspaces + active membership.
 		if ( str_contains( $query, 'INNER JOIN' ) && str_contains( $query, $members ) ) {
