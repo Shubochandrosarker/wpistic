@@ -1,0 +1,168 @@
+@import "tailwindcss";
+
+/* ============================================================
+   WPistic design tokens — ported 1:1 from the product's existing
+   design system (wpistic-dashboard/assets/tokens.css) so the
+   marketing site, dashboard, and theme all share one visual language.
+============================================================ */
+:root {
+  /* Brand purple */
+  --color-purple-50: #f3f1fe;
+  --color-purple-100: #e9e6fd;
+  --color-purple-200: #d4ccfb;
+  --color-purple-300: #b09ef7;
+  --color-purple-400: #8e78f2;
+  --color-purple-500: #6c5ce7;
+  --color-purple-600: #5649cc;
+  --color-purple-700: #4137a8;
+  --color-purple-800: #2d2780;
+  --color-purple-900: #1a1659;
+
+  /* Brand green */
+  --color-green-50: #e8faf0;
+  --color-green-100: #c4f2d8;
+  --color-green-200: #8ee5b2;
+  --color-green-300: #4ed48a;
+  --color-green-400: #1ec965;
+  --color-green-500: #00c04b;
+  --color-green-600: #009e3d;
+  --color-green-700: #007c2f;
+  --color-green-800: #005a22;
+  --color-green-900: #003815;
+
+  /* Neutrals */
+  --color-gray-0: #ffffff;
+  --color-gray-50: #f8f9ff;
+  --color-gray-100: #f0f2ff;
+  --color-gray-150: #e8eaff;
+  --color-gray-200: #d9dbf0;
+  --color-gray-300: #bfc2d9;
+  --color-gray-400: #9499ba;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5263;
+  --color-gray-700: #2e3245;
+  --color-gray-800: #1a1e2e;
+  --color-gray-900: #0d0f1a;
+
+  /* Semantic accents */
+  --color-blue-500: #3b82f6;
+  --color-amber-500: #f59e0b;
+  --color-red-500: #ef4444;
+
+  /* App surface system (light default) */
+  --bg-page: #ffffff;
+  --bg-alt: var(--color-gray-100);
+  --bg-dark: var(--color-gray-900);
+  --text-1: var(--color-gray-900);
+  --text-2: var(--color-gray-700);
+  --text-3: var(--color-gray-500);
+  --text-inverse: #ffffff;
+  --border-subtle: var(--color-gray-150);
+  --border-default: var(--color-gray-200);
+
+  --shadow-sm: 0 2px 12px rgba(108, 92, 231, 0.06);
+  --shadow-md: 0 8px 28px rgba(108, 92, 231, 0.12);
+  --shadow-lg: 0 24px 64px rgba(108, 92, 231, 0.16);
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-page: var(--color-gray-900);
+  --bg-alt: #13161f;
+  --bg-dark: #0b0d14;
+  --text-1: #f4f5fb;
+  --text-2: #c7cbda;
+  --text-3: #9499ba;
+  --border-subtle: #232838;
+  --border-default: #2c3142;
+  --shadow-sm: 0 2px 12px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 28px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+
+@theme inline {
+  --font-display: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+
+  --color-purple-50: var(--color-purple-50);
+  --color-purple-100: var(--color-purple-100);
+  --color-purple-200: var(--color-purple-200);
+  --color-purple-300: var(--color-purple-300);
+  --color-purple-400: var(--color-purple-400);
+  --color-purple-500: var(--color-purple-500);
+  --color-purple-600: var(--color-purple-600);
+  --color-purple-700: var(--color-purple-700);
+  --color-purple-800: var(--color-purple-800);
+  --color-purple-900: var(--color-purple-900);
+
+  --color-green-50: var(--color-green-50);
+  --color-green-100: var(--color-green-100);
+  --color-green-200: var(--color-green-200);
+  --color-green-300: var(--color-green-300);
+  --color-green-400: var(--color-green-400);
+  --color-green-500: var(--color-green-500);
+  --color-green-600: var(--color-green-600);
+  --color-green-700: var(--color-green-700);
+  --color-green-800: var(--color-green-800);
+  --color-green-900: var(--color-green-900);
+
+  --color-ink-50: var(--color-gray-50);
+  --color-ink-100: var(--color-gray-100);
+  --color-ink-150: var(--color-gray-150);
+  --color-ink-200: var(--color-gray-200);
+  --color-ink-300: var(--color-gray-300);
+  --color-ink-400: var(--color-gray-400);
+  --color-ink-500: var(--color-gray-500);
+  --color-ink-600: var(--color-gray-600);
+  --color-ink-700: var(--color-gray-700);
+  --color-ink-800: var(--color-gray-800);
+  --color-ink-900: var(--color-gray-900);
+}
+
+* {
+  border-color: var(--border-subtle);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bg-page);
+  color: var(--text-1);
+  font-family: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-purple-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: var(--color-purple-200);
+  color: var(--color-purple-900);
+}
+
+code,
+.mono {
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+}
