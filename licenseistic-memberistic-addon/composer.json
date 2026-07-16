@@ -1,0 +1,29 @@
+{
+    "name": "wpistic/licenseistic-memberistic-addon",
+    "description": "Dev tooling (tests) for the Licenseistic ⇄ Memberistic Bridge plugin. Not required at runtime.",
+    "license": "GPL-2.0-or-later",
+    "type": "wordpress-plugin",
+    "require": {
+        "php": ">=8.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5",
+        "brain/monkey": "^2.6"
+    },
+    "autoload": {
+        "psr-4": {
+            "WPistic\\Bridge\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "WPistic\\Bridge\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "scripts": {
+        "test": "phpunit"
+    }
+}
