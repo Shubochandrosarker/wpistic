@@ -1,0 +1,46 @@
+{
+  "name": "wpistic-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-02",
+  "compatibility_flags": ["nodejs_compat"],
+  "routes": [{ "pattern": "api.wpistic.com", "custom_domain": true }],
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "YOUR_HYPERDRIVE_ID",
+      "localConnectionString": "postgresql://wpistic:password@localhost:5432/wpistic"
+    }
+  ],
+  "kv_namespaces": [
+    { "binding": "RATE_LIMIT", "id": "YOUR_KV_ID" },
+    { "binding": "SESSION_CACHE", "id": "YOUR_KV_ID_2" }
+  ],
+  "queues": {
+    "producers": [{ "binding": "EVENT_BUS", "queue": "wpistic-events" }],
+    "consumers": [
+      {
+        "queue": "wpistic-events",
+        "max_batch_size": 25,
+        "max_retries": 5,
+        "dead_letter_queue": "wpistic-events-dlq"
+      }
+    ]
+  },
+  "r2_buckets": [
+    { "binding": "UPDATE_PACKAGES", "bucket_name": "wpistic-updates" },
+    { "binding": "ASSETS", "bucket_name": "wpistic-assets" }
+  ],
+  "vars": {
+    "ACCOUNT_SERVICE_URL": "https://account.wpistic.com",
+    "DASHBOARD_URL": "https://app.wpistic.com",
+    "STRIPE_PUBLISHABLE_KEY": "pk_live_...",
+    "ADMIN_EMAILS": ""
+  }
+  // Secrets (set via `wrangler secret put <NAME>`):
+  //   STRIPE_SECRET_KEY       — Stripe API key
+  //   STRIPE_WEBHOOK_SECRET   — Stripe webhook signing secret
+  //   LICENSE_SIGNING_SECRET  — HMAC master key for license responses
+  //   JWT_PUBLIC_KEY          — verifies access tokens from account.wpistic.com
+  //   JWT_PRIVATE_KEY         — re-signs access tokens on org switch
+  //   ADMIN_API_TOKEN         — bearer token for admin.wpistic.com server-side calls
+  //   MFA_ENC_KEY             — same AES key as the account service (admin MFA checks)
