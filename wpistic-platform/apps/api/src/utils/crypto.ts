@@ -68,7 +68,18 @@ export function canonicalJson(value: unknown): string {
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(',')}}`;
 }
 
-/** Sign a response payload (minus `signature`) with the per-license key; base64. */
+/** Derive a license key from master secret and license key hash */
+export async function deriveLicenseKey(masterSecret: string, licenseKeyHash: string): Promise<string> {
+  return hmacSha256Hex(masterSecret, licenseKeyHash);
+}
+
+/** Sign a response payload (minus `signature`) with the per-license key; hex encoding. */
+export async function signLicenseResponse(derivedKey: string, payload: Record<string, unknown>): Promise<string> {
+  const { signature: _omit, ...rest } = payload;
+  return hmacSha256Hex(derivedKey, canonicalJson(rest));
+}
+
+/** Sign a response payload (minus `signature`) with the per-license key; base64 (deprecated). */
 export async function signLicensePayload(verificationKeyHex: string, payload: Record<string, unknown>): Promise<string> {
   const { signature: _omit, ...rest } = payload;
   const sig = await hmacSha256(hexToBytes(verificationKeyHex), canonicalJson(rest));

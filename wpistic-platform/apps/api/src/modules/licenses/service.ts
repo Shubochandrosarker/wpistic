@@ -39,6 +39,7 @@ export interface LicenseRow {
   status: LicenseStatus;
   max_activations: number;
   expires_at: string | null;
+  grace_period_ends_at: string | null;
   product_slug: string;
   product_name: string;
   plan_slug: string;
@@ -220,6 +221,11 @@ export class LicenseService {
       ACTIVATION_TOKEN_TTL_DAYS * 86400
     );
 
+    const tokenHash = await sha256Hex(activationToken);
+    await this.sql`
+      UPDATE license_activations SET token_hash = ${tokenHash}
+      WHERE id = ${activation.id}`;
+
     return {
       ...base,
       activation_token: activationToken,
@@ -280,9 +286,21 @@ export class LicenseService {
   }
 
   async deactivateById(activation: ActivationRow, reason: string, ip: string | null): Promise<void> {
+    const rows = await this.sql<{ token_hash: string | null }[]>`
+      SELECT token_hash FROM license_activations WHERE id = ${activation.id}
+      LIMIT 1`;
+    const tokenHash = rows[0]?.token_hash;
+
     await this.sql`
       UPDATE license_activations SET status = 'inactive', deactivated_at = NOW()
       WHERE id = ${activation.id} AND status = 'active'`;
+
+    // Blocklist the token if it exists
+    if (tokenHash) {
+      const ttl = ACTIVATION_TOKEN_TTL_DAYS * 86400;
+      await this.cache.put(`revoked_token:${tokenHash}`, 'true', { expirationTtl: ttl });
+    }
+
     await this.logEvent(activation.license_id, 'deactivated', ip, null, {
       domain: activation.domain_normalized,
       reason,
@@ -358,7 +376,7 @@ export class LicenseService {
   private async findByKey(rawKey: string): Promise<LicenseRow | null> {
     const rows = await this.sql<LicenseRow[]>`
       SELECT l.id, l.organization_id, l.product_id, l.plan_id, l.subscription_id, l.key_mask, l.key_prefix,
-             l.status, l.max_activations, l.expires_at,
+             l.status, l.max_activations, l.expires_at, l.grace_period_ends_at,
              p.slug AS product_slug, p.name AS product_name, pl.slug AS plan_slug
       FROM licenses l
       JOIN products p ON p.id = l.product_id
@@ -371,7 +389,7 @@ export class LicenseService {
   async loadById(licenseId: string): Promise<LicenseRow | null> {
     const rows = await this.sql<LicenseRow[]>`
       SELECT l.id, l.organization_id, l.product_id, l.plan_id, l.subscription_id, l.key_mask, l.key_prefix,
-             l.status, l.max_activations, l.expires_at,
+             l.status, l.max_activations, l.expires_at, l.grace_period_ends_at,
              p.slug AS product_slug, p.name AS product_name, pl.slug AS plan_slug
       FROM licenses l
       JOIN products p ON p.id = l.product_id
@@ -385,9 +403,6 @@ export class LicenseService {
     if (license.status === 'revoked') throw ApiError.forbidden('This license has been revoked');
     if (license.status === 'suspended') throw ApiError.forbidden('This license is suspended — contact support');
     if (license.status === 'transferred') throw ApiError.forbidden('This license has been transferred');
-    if (license.status === 'expired' || (license.expires_at && new Date(license.expires_at) < new Date())) {
-      throw new ApiError(402, 'license_expired', 'This license has expired — renew to continue');
-    }
   }
 
   async resolveActivationToken(token: string): Promise<{ license: LicenseRow; activation: ActivationRow }> {
@@ -408,7 +423,21 @@ export class LicenseService {
 
   async buildValidationResponse(license: LicenseRow, activation: ActivationRow): Promise<LicenseValidationResponse> {
     const expired = license.expires_at !== null && new Date(license.expires_at) < new Date();
-    const valid = license.status === 'active' && !expired && activation.status === 'active';
+
+    // Check if in grace period (if license is expired but grace period hasn't ended)
+    const gracePeriodEnds = license.grace_period_ends_at ? new Date(license.grace_period_ends_at) : null;
+    const inGracePeriod = expired && gracePeriodEnds && gracePeriodEnds > new Date();
+
+    const valid = license.status === 'active' && (!expired || inGracePeriod) && activation.status === 'active';
+
+    let status: string;
+    if (inGracePeriod) {
+      status = 'grace_period';
+    } else if (expired) {
+      status = 'expired';
+    } else {
+      status = license.status;
+    }
 
     let entitlements: EntitlementMap = {};
     if (valid) {
@@ -427,9 +456,10 @@ export class LicenseService {
       : [];
     const channel = (channelRows[0]?.value ?? 'stable') as UpdateChannel;
 
-    const payload: Omit<LicenseValidationResponse, 'signature'> = {
+    const payload: Record<string, unknown> = {
       valid,
-      status: expired && license.status === 'active' ? 'expired' : license.status,
+      status,
+      grace_period_ends_at: gracePeriodEnds?.toISOString() ?? null,
       product: license.product_slug,
       plan: license.plan_slug,
       expires_at: license.expires_at,
@@ -444,8 +474,8 @@ export class LicenseService {
     };
 
     const verificationKey = await deriveLicenseVerificationKey(this.signingSecret, license.id);
-    const signature = await signLicensePayload(verificationKey, payload as unknown as Record<string, unknown>);
-    return { ...payload, signature };
+    const signature = await signLicensePayload(verificationKey, payload);
+    return { ...payload, signature } as LicenseValidationResponse;
   }
 
   async logEvent(
