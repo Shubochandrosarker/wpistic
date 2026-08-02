@@ -1,16 +1,27 @@
 /**
- * Tests for cryptographic functions: key generation, hashing, HMAC signing.
- * Critical for license security and offline verification.
+ * Tests for cryptographic functions: key generation, hashing, the HMAC
+ * contract for license responses, and RS256 activation tokens.
  */
-import { describe, it, expect } from 'vitest';
-import { generateLicenseKey, sha256Hex, signLicensePayload, deriveLicenseVerificationKey } from './crypto';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { generateKeyPair, exportPKCS8, exportSPKI } from 'jose';
+import {
+  generateLicenseKey,
+  sha256Hex,
+  sha256HexBytes,
+  deriveLicenseKey,
+  signLicenseResponse,
+  signActivationToken,
+  verifyActivationToken,
+  canonicalJson,
+  type ActivationTokenClaims,
+} from './crypto';
 
 describe('generateLicenseKey', () => {
   it('should generate key with prefix and 32-char hex suffix', () => {
     const { key, prefix, mask } = generateLicenseKey('testprod');
     expect(key).toMatch(/^testprod_[a-f0-9]{32}$/);
-    expect(prefix).toBe('testprod');
-    expect(mask).toMatch(/^testprod_.*\*{4}[a-f0-9]{4}$/);
+    expect(prefix).toBe('testprod_');
+    expect(mask).toMatch(/^testprod_\*{4}[a-f0-9]{4}$/);
   });
 
   it('should generate unique keys on each call', () => {
@@ -19,131 +30,141 @@ describe('generateLicenseKey', () => {
     expect(key1.key).not.toBe(key2.key);
   });
 
-  it('should mask the key correctly', () => {
+  it('should mask the key without revealing the secret', () => {
     const { key, mask } = generateLicenseKey('seoistic');
+    const secret = key.slice('seoistic_'.length);
     expect(mask).toContain('seoistic_');
-    expect(mask).not.toContain(key.split('_')[1]);
-    expect(mask).toMatch(new RegExp(key.slice(-4) + '$'));
-  });
-
-  it('should handle multi-word prefixes', () => {
-    const { key } = generateLicenseKey('wpistic_pro');
-    expect(key).toMatch(/^wpistic_pro_[a-f0-9]{32}$/);
+    expect(mask).not.toContain(secret.slice(0, -4));
+    expect(mask.endsWith(secret.slice(-4))).toBe(true);
   });
 });
 
-describe('sha256Hex', () => {
-  it('should generate consistent hash for same input', async () => {
-    const input = 'test-license-key-value';
-    const hash1 = await sha256Hex(input);
-    const hash2 = await sha256Hex(input);
-    expect(hash1).toBe(hash2);
-  });
-
-  it('should produce 64-char hex string (SHA-256)', async () => {
-    const hash = await sha256Hex('example');
-    expect(hash).toMatch(/^[a-f0-9]{64}$/);
-    expect(hash).toHaveLength(64);
-  });
-
-  it('should differ for different inputs', async () => {
-    const hash1 = await sha256Hex('input1');
-    const hash2 = await sha256Hex('input2');
-    expect(hash1).not.toBe(hash2);
-  });
-
-  it('should handle long inputs', async () => {
-    const longInput = 'a'.repeat(10000);
-    const hash = await sha256Hex(longInput);
-    expect(hash).toMatch(/^[a-f0-9]{64}$/);
-  });
-
-  it('should be deterministic (known test vectors)', async () => {
-    // SHA-256('hello') = 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+describe('sha256Hex / sha256HexBytes', () => {
+  it('should be deterministic (known test vector)', async () => {
     const hash = await sha256Hex('hello');
     expect(hash).toBe('2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824');
   });
+
+  it('should produce a 64-char hex string', async () => {
+    expect(await sha256Hex('example')).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('should differ for different inputs', async () => {
+    expect(await sha256Hex('input1')).not.toBe(await sha256Hex('input2'));
+  });
+
+  it('should hash raw bytes independently of string round-tripping (binary safety)', async () => {
+    const bytes = new Uint8Array([0, 128, 255, 1, 254, 63, 200]);
+    const hash1 = await sha256HexBytes(bytes);
+    const hash2 = await sha256HexBytes(new Uint8Array(bytes));
+    expect(hash1).toBe(hash2);
+    expect(hash1).toMatch(/^[a-f0-9]{64}$/);
+  });
 });
 
-describe('signLicensePayload', () => {
-  it('should generate HMAC-SHA256 signature', async () => {
-    const payload = { license_id: 'lic123', status: 'active' };
-    const secret = 'my-secret-key';
-    const sig1 = await signLicensePayload(secret, payload);
+describe('canonicalJson', () => {
+  it('sorts object keys recursively', () => {
+    expect(canonicalJson({ b: 1, a: { d: 2, c: 3 } })).toBe('{"a":{"c":3,"d":2},"b":1}');
+  });
+
+  it('omits undefined values', () => {
+    expect(canonicalJson({ a: 1, b: undefined })).toBe('{"a":1}');
+  });
+
+  it('preserves array order', () => {
+    expect(canonicalJson([3, 1, 2])).toBe('[3,1,2]');
+  });
+});
+
+describe('HMAC contract: deriveLicenseKey + signLicenseResponse', () => {
+  it('derives a 64-char hex key from master secret + license_key_hash', async () => {
+    const key = await deriveLicenseKey('master-secret', 'a'.repeat(64));
+    expect(key).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('derived key differs for different license_key_hash values', async () => {
+    const key1 = await deriveLicenseKey('master', 'hash1');
+    const key2 = await deriveLicenseKey('master', 'hash2');
+    expect(key1).not.toBe(key2);
+  });
+
+  it('signs a payload deterministically, excluding the signature field, as hex', async () => {
+    const derivedKey = await deriveLicenseKey('master', 'hash');
+    const payload = { valid: true, status: 'active', signature: 'ignored' };
+    const sig1 = await signLicenseResponse(derivedKey, payload);
+    const sig2 = await signLicenseResponse(derivedKey, { ...payload, signature: 'different-but-excluded' });
+    expect(sig1).toBe(sig2);
     expect(sig1).toMatch(/^[a-f0-9]{64}$/);
   });
 
-  it('should be consistent for same payload and secret', async () => {
-    const payload = { license_id: 'lic123', status: 'active' };
-    const secret = 'my-secret-key';
-    const sig1 = await signLicensePayload(secret, payload);
-    const sig2 = await signLicensePayload(secret, payload);
+  it('is order-independent for object keys (canonical JSON)', async () => {
+    const derivedKey = await deriveLicenseKey('master', 'hash');
+    const sig1 = await signLicenseResponse(derivedKey, { a: 1, b: 2 });
+    const sig2 = await signLicenseResponse(derivedKey, { b: 2, a: 1 });
     expect(sig1).toBe(sig2);
   });
 
-  it('should differ for different secrets', async () => {
-    const payload = { license_id: 'lic123', status: 'active' };
-    const sig1 = await signLicensePayload('secret1', payload);
-    const sig2 = await signLicensePayload('secret2', payload);
-    expect(sig1).not.toBe(sig2);
-  });
-
-  it('should differ for different payloads', async () => {
-    const secret = 'my-secret-key';
-    const sig1 = await signLicensePayload(secret, { id: '1', status: 'active' });
-    const sig2 = await signLicensePayload(secret, { id: '1', status: 'revoked' });
-    expect(sig1).not.toBe(sig2);
-  });
-
-  it('should handle nested objects', async () => {
-    const payload = {
-      license: { id: 'lic123' },
-      entitlements: { pro: true, sites: 5 },
-    };
-    const sig = await signLicensePayload('secret', payload);
-    expect(sig).toMatch(/^[a-f0-9]{64}$/);
-  });
-
-  it('should be order-independent for object keys', async () => {
-    const secret = 'secret';
-    const payload1 = { a: 1, b: 2, c: 3 };
-    const payload2 = { c: 3, a: 1, b: 2 };
-    // Note: This assumes the signature function sorts keys
-    // If keys are not sorted, this test should verify the expected behavior
-    const sig1 = await signLicensePayload(secret, payload1);
-    const sig2 = await signLicensePayload(secret, payload2);
-    // Behavior depends on implementation - just verify it produces valid sigs
-    expect(sig1).toMatch(/^[a-f0-9]{64}$/);
-    expect(sig2).toMatch(/^[a-f0-9]{64}$/);
+  it('differs for different derived keys', async () => {
+    const keyA = await deriveLicenseKey('master-a', 'hash');
+    const keyB = await deriveLicenseKey('master-b', 'hash');
+    const payload = { valid: true };
+    expect(await signLicenseResponse(keyA, payload)).not.toBe(await signLicenseResponse(keyB, payload));
   });
 });
 
-describe('deriveLicenseVerificationKey', () => {
-  it('should derive consistent key for same inputs', async () => {
-    const master = 'master-secret-key';
-    const hash = 'abc123def456';
-    const key1 = deriveLicenseVerificationKey(master, hash);
-    const key2 = deriveLicenseVerificationKey(master, hash);
-    expect(key1).toBe(key2);
+describe('RS256 activation tokens', () => {
+  let privateKeyPem: string;
+  let publicKeyPem: string;
+  let otherPublicKeyPem: string;
+
+  beforeAll(async () => {
+    const { privateKey, publicKey } = await generateKeyPair('RS256');
+    privateKeyPem = await exportPKCS8(privateKey);
+    publicKeyPem = await exportSPKI(publicKey);
+    const other = await generateKeyPair('RS256');
+    otherPublicKeyPem = await exportSPKI(other.publicKey);
   });
 
-  it('should produce 64-char hex string', () => {
-    const key = deriveLicenseVerificationKey('master', 'hash');
-    expect(key).toMatch(/^[a-f0-9]{64}$/);
-    expect(key).toHaveLength(64);
+  const claims = (): ActivationTokenClaims => ({
+    sub: 'activation-1',
+    license_id: 'license-1',
+    org_id: 'org-1',
+    product_id: 'product-1',
+    domain: 'example.com',
+    environment: 'production',
+    installation_uuid: 'install-1',
   });
 
-  it('should differ for different master secrets', () => {
-    const hash = 'abc123';
-    const key1 = deriveLicenseVerificationKey('master1', hash);
-    const key2 = deriveLicenseVerificationKey('master2', hash);
-    expect(key1).not.toBe(key2);
+  it('round-trips claims through sign + verify', async () => {
+    const token = await signActivationToken(privateKeyPem, claims(), 3600);
+    const verified = await verifyActivationToken(publicKeyPem, token);
+    expect(verified).not.toBeNull();
+    expect(verified?.sub).toBe('activation-1');
+    expect(verified?.license_id).toBe('license-1');
+    expect(verified?.domain).toBe('example.com');
+    expect(verified?.installation_uuid).toBe('install-1');
   });
 
-  it('should differ for different key hashes', () => {
-    const master = 'master';
-    const key1 = deriveLicenseVerificationKey(master, 'hash1');
-    const key2 = deriveLicenseVerificationKey(master, 'hash2');
-    expect(key1).not.toBe(key2);
+  it('rejects a token signed by a different key', async () => {
+    const token = await signActivationToken(privateKeyPem, claims(), 3600);
+    expect(await verifyActivationToken(otherPublicKeyPem, token)).toBeNull();
+  });
+
+  it('rejects an expired token', async () => {
+    const token = await signActivationToken(privateKeyPem, claims(), -10);
+    expect(await verifyActivationToken(publicKeyPem, token)).toBeNull();
+  });
+
+  it('rejects a tampered token', async () => {
+    const token = await signActivationToken(privateKeyPem, claims(), 3600);
+    const parts = token.split('.');
+    const json = JSON.stringify({ ...claims(), org_id: 'attacker-org' });
+    const tamperedPayload = btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const tampered = `${parts[0]}.${tamperedPayload}.${parts[2]}`;
+    expect(await verifyActivationToken(publicKeyPem, tampered)).toBeNull();
+  });
+
+  it('rejects a malformed token without throwing', async () => {
+    expect(await verifyActivationToken(publicKeyPem, 'not-a-jwt')).toBeNull();
   });
 });

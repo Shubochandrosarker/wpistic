@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<ruleset name="WPistic SDK">
+    <description>WordPress Coding Standards, adapted for a PSR-4 autoloaded Composer library.</description>
+
+    <rule ref="WordPress">
+        <!--
+            This SDK is PSR-4 autoloaded (composer.json: "WPistic\Sdk\": "src/"),
+            so filenames match class names exactly (WpisticClient.php, not
+            class-wpistic-client.php) — the standard, widely-adopted convention
+            for Composer packages, including ones intended for WordPress. The
+            "WordPress" ruleset's file-naming sniffs assume the classic
+            no-namespace plugin layout and are not applicable here.
+        -->
+        <exclude name="WordPress.Files.FileName" />
+    </rule>
+
+    <file>src</file>
+    <arg name="extensions" value="php"/>
+    <arg name="colors"/>
+
+    <!--
+        A handful of sniffs here are known, judged-acceptable false positives
+        (documented at each call site: legitimate base64 for binary-to-text
+        encoding, not obfuscation; deliberate @-suppressed calls that already
+        fail closed on error; the WordPress function fallback for non-WP unit
+        test runs). None of them are errors — only warnings — and `composer
+        lint`/CI must not fail on a clean, error-free run just because
+        warnings are still visible.
+    -->
+    <config name="ignore_warnings_on_exit" value="1"/>
+</ruleset>

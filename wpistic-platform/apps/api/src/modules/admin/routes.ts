@@ -10,15 +10,16 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { SignJWT, importPKCS8 } from 'jose';
 import type { Context, MiddlewareHandler } from 'hono';
-import { adminLicenseActionSchema, impersonateSchema, updateChannelSchema } from '@wpistic/types';
+import { adminLicenseActionSchema, impersonateSchema } from '@wpistic/types';
 import type { AppContext, Env } from '../../env';
 import { ApiError } from '../../errors';
 import { getClientIp } from '../../middleware/correlation';
 import { decryptMfaSecret, verifyTotpCode } from '../../utils/totp';
+import { makeLicenseService } from '../licenses/routes';
 import { resolveAdminRole } from '../../middleware/auth';
-import { LicenseService } from '../licenses/service';
 import { EntitlementService } from '../entitlements/service';
 import { makeBillingService } from '../billing/routes';
+import { packageRoutes } from '../updates/routes';
 
 const requireAdmin: MiddlewareHandler<AppContext> = async (c, next) => {
   const kind = c.get('authKind');
@@ -191,34 +192,49 @@ adminRoutes.post('/licenses/:licenseId/action', zValidator('json', adminLicenseA
   const sql = c.get('sql');
   const licenseId = c.req.param('licenseId');
   const { action, reason } = c.req.valid('json');
+  const admin = c.get('user');
+  const actor = { type: 'admin' as const, id: admin?.id ?? null, email: admin?.email ?? null };
 
   const rows = await sql<{ id: string; organization_id: string; status: string }[]>`
     SELECT id, organization_id, status FROM licenses WHERE id = ${licenseId} LIMIT 1`;
   const license = rows[0];
   if (!license) throw ApiError.notFound('License');
 
-  const licenses = new LicenseService(sql, c.get('events'), c.env.LICENSE_SIGNING_SECRET, c.env.SESSION_CACHE);
+  const licenses = makeLicenseService(c);
 
   switch (action) {
     case 'suspend':
       await sql`UPDATE licenses SET status = 'suspended' WHERE id = ${licenseId}`;
       break;
     case 'reactivate':
-      await sql`UPDATE licenses SET status = 'active', revoked_at = NULL, revocation_reason = NULL
+      await sql`UPDATE licenses SET status = 'active', revoked_at = NULL, revoked_reason = NULL
                 WHERE id = ${licenseId}`;
       break;
-    case 'revoke':
-      await sql`UPDATE licenses SET status = 'revoked', revoked_at = NOW(), revocation_reason = ${reason}
+    case 'revoke': {
+      await sql`UPDATE licenses SET status = 'revoked', revoked_at = NOW(), revoked_reason = ${reason}
                 WHERE id = ${licenseId}`;
-      await sql`UPDATE license_activations SET status = 'revoked' WHERE license_id = ${licenseId}`;
+      const activeActivations = await sql<Array<{ id: string; license_id: string; organization_id: string; website_id: string | null; domain_normalized: string; installation_uuid: string; environment: string; status: string; token_hash: string | null }>>`
+        SELECT id, license_id, organization_id, website_id, domain_normalized, installation_uuid, environment, status, token_hash
+        FROM license_activations WHERE license_id = ${licenseId} AND status = 'active'`;
+      for (const activation of activeActivations) {
+        await licenses.deactivateById(activation as never, `admin_revoke:${reason}`, getClientIp(c), actor);
+      }
       break;
+    }
     case 'reset_activations':
       await sql`UPDATE license_activations SET status = 'inactive', deactivated_at = NOW()
                 WHERE license_id = ${licenseId} AND status = 'active'`;
       break;
   }
 
-  await licenses.logEvent(licenseId, `admin_${action}`, getClientIp(c), null, { reason });
+  await licenses.logEvent(sql, {
+    licenseId,
+    organizationId: license.organization_id,
+    eventType: `admin_${action}`,
+    actor,
+    ip: getClientIp(c),
+    meta: { reason },
+  });
   await adminAudit(c, `license.${action}`, 'licenses', licenseId, license.organization_id, { reason });
   await new EntitlementService(sql, c.env.SESSION_CACHE).invalidate(license.organization_id);
   return c.json({ ok: true });
@@ -369,7 +385,7 @@ adminRoutes.post(
 
     let licenseKey: string | null = null;
     if (target.product_type === 'plugin') {
-      const licenses = new LicenseService(sql, c.get('events'), c.env.LICENSE_SIGNING_SECRET, c.env.SESSION_CACHE);
+      const licenses = makeLicenseService(c);
       const issued = await licenses.issue({
         organizationId: orgId,
         productId: target.product_id,
@@ -475,61 +491,9 @@ adminRoutes.post('/impersonate', zValidator('json', impersonateSchema), async (c
 });
 
 // ---------------------------------------------------------------------------
-// Product releases (update service)
+// Update packages — /api/v1/admin/packages (upload, publish, rollback).
+// The canonical implementation lives in modules/updates; this is the only
+// path for release management (the legacy product_releases table is retired).
 // ---------------------------------------------------------------------------
 
-adminRoutes.post(
-  '/releases',
-  zValidator(
-    'json',
-    z.object({
-      product_slug: z.string().min(1),
-      version: z.string().min(1).max(50),
-      channel: updateChannelSchema.default('stable'),
-      requires_php: z.string().max(20).optional(),
-      requires_wp: z.string().max(20).optional(),
-      tested_up_to: z.string().max(20).optional(),
-      changelog_url: z.string().url().optional(),
-      package_key: z.string().min(1),
-      package_hash: z.string().max(100).optional(),
-      package_size: z.number().int().positive().optional(),
-      is_security_release: z.boolean().default(false),
-      publish: z.boolean().default(false),
-    })
-  ),
-  async (c) => {
-    const sql = c.get('sql');
-    const body = c.req.valid('json');
-    const products = await sql<{ id: string }[]>`SELECT id FROM products WHERE slug = ${body.product_slug} LIMIT 1`;
-    if (!products[0]) throw ApiError.notFound('Product');
-
-    const rows = await sql<{ id: string }[]>`
-      INSERT INTO product_releases (product_id, version, channel, requires_php, requires_wp, tested_up_to,
-                                    changelog_url, package_key, package_hash, package_size, is_security_release,
-                                    status, published_at)
-      VALUES (${products[0].id}, ${body.version}, ${body.channel}, ${body.requires_php ?? null},
-              ${body.requires_wp ?? null}, ${body.tested_up_to ?? null}, ${body.changelog_url ?? null},
-              ${body.package_key}, ${body.package_hash ?? null}, ${body.package_size ?? null},
-              ${body.is_security_release}, ${body.publish ? 'published' : 'draft'},
-              ${body.publish ? sql`NOW()` : null})
-      ON CONFLICT (product_id, version, channel)
-      DO UPDATE SET package_key = EXCLUDED.package_key, package_hash = EXCLUDED.package_hash,
-                    status = EXCLUDED.status, published_at = EXCLUDED.published_at
-      RETURNING id`;
-
-    if (body.publish) {
-      await c.get('events').publish('product.update.published', {
-        product_id: products[0].id,
-        version: body.version,
-        channel: body.channel,
-      });
-    }
-    await adminAudit(c, 'release.publish', 'product_releases', rows[0]!.id, null, {
-      product: body.product_slug,
-      version: body.version,
-      channel: body.channel,
-      published: body.publish,
-    });
-    return c.json({ release_id: rows[0]!.id }, 201);
-  }
-);
+adminRoutes.route('/packages', packageRoutes);

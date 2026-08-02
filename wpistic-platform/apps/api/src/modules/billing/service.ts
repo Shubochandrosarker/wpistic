@@ -8,12 +8,26 @@
  * publish events.
  */
 import type { Sql } from 'postgres';
+import type { DomainEvent } from '@wpistic/types';
 import { ApiError } from '../../errors';
 import type { EventBus } from '../../events/bus';
+import { writeOutboxEvent } from '../../events/outbox';
 import { StripeClient } from './stripe';
 import { CreditService } from '../ai-credits/service';
 import { LicenseService } from '../licenses/service';
 import { EntitlementService } from '../entitlements/service';
+
+/** Stripe subscription statuses this platform explicitly understands. Anything else falls back to `paused` — never `active` — so an unrecognized status never grants entitlements by accident. */
+const STRIPE_STATUS_MAP: Record<string, string> = {
+  active: 'active',
+  trialing: 'trialing',
+  past_due: 'past_due',
+  paused: 'paused',
+  canceled: 'cancelled',
+  unpaid: 'grace_period',
+  incomplete: 'past_due',
+  incomplete_expired: 'expired',
+};
 
 interface PriceRow {
   id: string;
@@ -186,6 +200,75 @@ export class BillingService {
     return updated[0];
   }
 
+  /** Undo a pending cancellation before the paid period ends — resumes access (spec 8.3). */
+  async reactivateSubscription(orgId: string, subscriptionId: string) {
+    const rows = await this.sql<
+      Array<{ id: string; stripe_subscription_id: string | null; cancel_at_period_end: boolean; ended_at: string | null }>
+    >`
+      SELECT id, stripe_subscription_id, cancel_at_period_end, ended_at FROM subscriptions
+      WHERE id = ${subscriptionId} AND organization_id = ${orgId} LIMIT 1`;
+    const sub = rows[0];
+    if (!sub) throw ApiError.notFound('Subscription');
+    if (sub.ended_at) throw ApiError.conflict('subscription_ended', 'This subscription has already ended — start a new checkout instead');
+    if (!sub.cancel_at_period_end) throw ApiError.conflict('not_cancelling', 'Subscription is not scheduled to cancel');
+
+    if (sub.stripe_subscription_id) {
+      await this.deps.stripe.resumeSubscription(sub.stripe_subscription_id);
+    }
+    const updated = await this.sql`
+      UPDATE subscriptions SET cancel_at_period_end = FALSE, cancelled_at = NULL
+      WHERE id = ${subscriptionId}
+      RETURNING id, status, current_period_end, cancel_at_period_end`;
+
+    await this.deps.entitlements.invalidate(orgId);
+    await this.events.publish('entitlements.changed', { org_id: orgId, product_id: null, version: Math.floor(Date.now() / 1000) });
+    return updated[0];
+  }
+
+  /** Prorated plan change — updates Stripe (if live), then recalculates entitlements immediately (spec 8.3). */
+  async upgradeSubscription(orgId: string, subscriptionId: string, newPriceId: string) {
+    const subs = await this.sql<Array<{ id: string; stripe_subscription_id: string | null; status: string }>>`
+      SELECT id, stripe_subscription_id, status FROM subscriptions WHERE id = ${subscriptionId} AND organization_id = ${orgId} LIMIT 1`;
+    const sub = subs[0];
+    if (!sub) throw ApiError.notFound('Subscription');
+    if (sub.status === 'cancelled' || sub.status === 'expired') {
+      throw ApiError.conflict('subscription_inactive', 'Cannot change plan on an inactive subscription');
+    }
+
+    const newPrice = await this.loadPrice(newPriceId);
+    const items = await this.sql<Array<{ id: string; stripe_subscription_item_id: string | null }>>`
+      SELECT id, stripe_subscription_item_id FROM subscription_items WHERE subscription_id = ${subscriptionId} LIMIT 1`;
+    const item = items[0];
+    if (!item) throw ApiError.notFound('Subscription item');
+
+    if (sub.stripe_subscription_id && newPrice.stripe_price_id) {
+      let stripeItemId = item.stripe_subscription_item_id;
+      if (!stripeItemId) {
+        // Never backfilled at checkout time — resolve it live and cache it for next time.
+        const liveSub = await this.deps.stripe.getSubscription(sub.stripe_subscription_id);
+        const liveItems = (liveSub.items as { data?: Array<{ id: string }> } | undefined)?.data;
+        stripeItemId = liveItems?.[0]?.id ?? null;
+        if (stripeItemId) {
+          await this.sql`UPDATE subscription_items SET stripe_subscription_item_id = ${stripeItemId} WHERE id = ${item.id}`;
+        }
+      }
+      if (!stripeItemId) throw new ApiError(500, 'internal_error', 'Could not resolve the Stripe subscription item to upgrade');
+      await this.deps.stripe.updateSubscriptionItemPrice(sub.stripe_subscription_id, stripeItemId, newPrice.stripe_price_id);
+    }
+
+    await this.sql`
+      UPDATE subscription_items SET plan_id = ${newPrice.plan_id}, price_id = ${newPrice.id}, product_id = ${newPrice.product_id}
+      WHERE id = ${item.id}`;
+
+    await this.deps.entitlements.invalidate(orgId);
+    await this.events.publish('entitlements.changed', {
+      org_id: orgId,
+      product_id: newPrice.product_id,
+      version: Math.floor(Date.now() / 1000),
+    });
+    return { subscription_id: subscriptionId, plan_id: newPrice.plan_id };
+  }
+
   async listInvoices(orgId: string) {
     return this.sql`
       SELECT id, amount_due, amount_paid, currency, status, pdf_url, due_date, paid_at, created_at
@@ -197,14 +280,25 @@ export class BillingService {
   // Stripe webhooks
   // -------------------------------------------------------------------------
 
-  /** Returns false when the event was already processed (idempotent replay). */
+  /**
+   * Returns true when the event still needs processing. The raw row is
+   * stored unconditionally on the first sighting (idempotent insert), but
+   * whether to (re)run `processWebhookEvent` is decided by `processed_at`,
+   * not row existence — a row that exists because a prior attempt failed
+   * partway through must still be reprocessed on retry/replay, otherwise a
+   * failure permanently freezes that event as "duplicate, skip".
+   */
   async recordWebhookEvent(stripeEventId: string, eventType: string, payload: unknown, signature: string | null): Promise<boolean> {
-    const rows = await this.sql`
+    const inserted = await this.sql<{ id: string }[]>`
       INSERT INTO webhook_events (event_type, provider, provider_event_id, payload, signature)
       VALUES (${eventType}, 'stripe', ${stripeEventId}, ${this.sql.json(payload as never)}, ${signature})
       ON CONFLICT (provider, provider_event_id) DO NOTHING
       RETURNING id`;
-    return rows.length > 0;
+    if (inserted.length > 0) return true;
+
+    const existing = await this.sql<{ processed_at: string | null }[]>`
+      SELECT processed_at FROM webhook_events WHERE provider = 'stripe' AND provider_event_id = ${stripeEventId} LIMIT 1`;
+    return existing[0]?.processed_at == null;
   }
 
   async markWebhookProcessed(stripeEventId: string, error?: string): Promise<void> {
@@ -270,29 +364,52 @@ export class BillingService {
           WHERE subscription_id = ${subscriptionId} AND product_id = ${price.product_id} AND plan_id = ${price.plan_id}
         )`;
 
-      await tx`
+      const orderRows = await tx<{ id: string }[]>`
         INSERT INTO orders (organization_id, subscription_id, stripe_checkout_session_id, status, total_amount, currency)
-        VALUES (${orgId}, ${subscriptionId}, ${String(session.id)}, 'completed',
+        SELECT ${orgId}, ${subscriptionId}, ${String(session.id)}, 'completed',
                 ${(session.amount_total as number | null) ?? price.amount * quantity},
-                ${String(session.currency ?? price.currency).toUpperCase()})
-        ON CONFLICT DO NOTHING`;
+                ${String(session.currency ?? price.currency).toUpperCase()}
+        WHERE NOT EXISTS (SELECT 1 FROM orders WHERE stripe_checkout_session_id = ${String(session.id)})
+        RETURNING id`;
+      const isNewOrder = orderRows.length > 0;
+
+      // Transactional redemption counter — only when this checkout session's
+      // order is genuinely new, so a webhook retry/replay never double-counts.
+      if (isNewOrder && metadata.coupon_code) {
+        await tx`UPDATE coupons SET redemption_count = redemption_count + 1 WHERE code = ${metadata.coupon_code}`;
+      }
+
+      await writeOutboxEvent<Extract<DomainEvent, { type: 'subscription.activated' }>>(
+        tx,
+        'subscription.activated',
+        { org_id: orgId, subscription_id: subscriptionId, plan_ids: [price.plan_id] },
+        orgId
+      );
+      await writeOutboxEvent<Extract<DomainEvent, { type: 'entitlements.changed' }>>(
+        tx,
+        'entitlements.changed',
+        { org_id: orgId, product_id: price.product_id, version: Math.floor(Date.now() / 1000) },
+        orgId
+      );
 
       return subscriptionId;
     });
 
-    if (metadata.coupon_code) {
-      await this.sql`UPDATE coupons SET redemption_count = redemption_count + 1 WHERE code = ${metadata.coupon_code}`;
-    }
-
-    // Plugin products get a license automatically; SaaS products rely on entitlements.
+    // Plugin products get a license automatically; SaaS products rely on
+    // entitlements. Guarded so a webhook retry/replay never issues a second
+    // license for the same subscription+product (spec 8.1).
     if (price.product_type === 'plugin') {
-      await this.deps.licenses.issue({
-        organizationId: orgId,
-        productId: price.product_id,
-        planId: price.plan_id,
-        subscriptionId,
-        expiresAt: isLifetime ? null : this.periodEndFromInterval(price.interval, 3), // 3-day renewal buffer
-      });
+      const existingLicense = await this.sql<{ id: string }[]>`
+        SELECT id FROM licenses WHERE subscription_id = ${subscriptionId} AND product_id = ${price.product_id} LIMIT 1`;
+      if (!existingLicense[0]) {
+        await this.deps.licenses.issue({
+          organizationId: orgId,
+          productId: price.product_id,
+          planId: price.plan_id,
+          subscriptionId,
+          expiresAt: isLifetime ? null : this.periodEndFromInterval(price.interval, 3), // 3-day renewal buffer
+        });
+      }
     }
 
     // Monthly AI credit allowance from the plan's entitlement, granted up front.
@@ -315,16 +432,6 @@ export class BillingService {
     }
 
     await this.deps.entitlements.invalidate(orgId);
-    await this.events.publish('subscription.activated', {
-      org_id: orgId,
-      subscription_id: subscriptionId,
-      plan_ids: [price.plan_id],
-    });
-    await this.events.publish('entitlements.changed', {
-      org_id: orgId,
-      product_id: price.product_id,
-      version: Math.floor(Date.now() / 1000),
-    });
   }
 
   private async onInvoicePaid(invoice: Record<string, unknown>): Promise<void> {
@@ -340,10 +447,11 @@ export class BillingService {
             current_period_end = COALESCE(${periodEnd}, current_period_end)
         WHERE id = ${sub.id}`;
 
-      // Renew licenses attached to this subscription.
+      // Renew licenses attached to this subscription — a successful payment
+      // always clears any grace period a prior failed payment had started.
       await this.sql`
         UPDATE licenses
-        SET status = 'active', renewed_at = NOW(),
+        SET status = 'active', renewed_at = NOW(), grace_period_ends_at = NULL,
             expires_at = ${periodEnd ? new Date(periodEnd.getTime() + 3 * 86400 * 1000) : null}
         WHERE subscription_id = ${sub.id} AND status IN ('active', 'expired')`;
 
@@ -367,11 +475,14 @@ export class BillingService {
       }
 
       await this.deps.entitlements.invalidate(sub.organization_id);
-      await this.events.publish('entitlements.changed', {
-        org_id: sub.organization_id,
-        product_id: null,
-        version: Math.floor(Date.now() / 1000),
-      });
+      await this.sql.begin((tx) =>
+        writeOutboxEvent<Extract<DomainEvent, { type: 'entitlements.changed' }>>(
+          tx,
+          'entitlements.changed',
+          { org_id: sub.organization_id, product_id: null, version: Math.floor(Date.now() / 1000) },
+          sub.organization_id
+        )
+      );
     }
 
     if (sub) {
@@ -387,6 +498,13 @@ export class BillingService {
     }
   }
 
+  /**
+   * A failed payment immediately puts every license on this subscription
+   * into its 7-day grace period (spec 8.2) — the same server-side truth
+   * `evaluateLicenseLifecycle` (licenses/service.ts) reads everywhere else:
+   * `expires_at` moves to now, `grace_period_ends_at` to now+7d, so the
+   * license reads as `grace_period` (still usable) until that deadline.
+   */
   private async onInvoicePaymentFailed(invoice: Record<string, unknown>): Promise<void> {
     const stripeSubscriptionId = (invoice.subscription as string | null) ?? null;
     if (!stripeSubscriptionId) return;
@@ -394,17 +512,23 @@ export class BillingService {
     if (!sub) return;
 
     const graceEnd = new Date(Date.now() + 7 * 86400 * 1000);
-    await this.sql`UPDATE subscriptions SET status = 'past_due' WHERE id = ${sub.id}`;
-    await this.sql`
-      INSERT INTO invoices (organization_id, subscription_id, stripe_invoice_id, amount_due, amount_paid, currency, status)
-      VALUES (${sub.organization_id}, ${sub.id}, ${String(invoice.id)},
-              ${(invoice.amount_due as number) ?? 0}, ${(invoice.amount_paid as number) ?? 0},
-              ${String(invoice.currency ?? 'usd').toUpperCase()}, 'open')
-      ON CONFLICT (stripe_invoice_id) DO UPDATE SET status = 'open'`;
-    await this.events.publish('subscription.past_due', {
-      org_id: sub.organization_id,
-      subscription_id: sub.id,
-      grace_period_end: graceEnd.toISOString(),
+    await this.sql.begin(async (tx) => {
+      await tx`UPDATE subscriptions SET status = 'past_due' WHERE id = ${sub.id}`;
+      await tx`
+        UPDATE licenses SET expires_at = NOW(), grace_period_ends_at = ${graceEnd}
+        WHERE subscription_id = ${sub.id} AND status = 'active' AND (expires_at IS NULL OR expires_at > NOW())`;
+      await tx`
+        INSERT INTO invoices (organization_id, subscription_id, stripe_invoice_id, amount_due, amount_paid, currency, status)
+        VALUES (${sub.organization_id}, ${sub.id}, ${String(invoice.id)},
+                ${(invoice.amount_due as number) ?? 0}, ${(invoice.amount_paid as number) ?? 0},
+                ${String(invoice.currency ?? 'usd').toUpperCase()}, 'open')
+        ON CONFLICT (stripe_invoice_id) DO UPDATE SET status = 'open'`;
+      await writeOutboxEvent<Extract<DomainEvent, { type: 'subscription.past_due' }>>(
+        tx,
+        'subscription.past_due',
+        { org_id: sub.organization_id, subscription_id: sub.id, grace_period_end: graceEnd.toISOString() },
+        sub.organization_id
+      );
     });
   }
 
@@ -413,55 +537,50 @@ export class BillingService {
     if (!sub) return;
 
     const stripeStatus = String(subscription.status ?? 'active');
-    const statusMap: Record<string, string> = {
-      active: 'active',
-      trialing: 'trialing',
-      past_due: 'past_due',
-      paused: 'paused',
-      canceled: 'cancelled',
-      unpaid: 'grace_period',
-      incomplete: 'past_due',
-      incomplete_expired: 'expired',
-    };
     const periodEnd = typeof subscription.current_period_end === 'number'
       ? new Date(subscription.current_period_end * 1000)
       : null;
 
-    await this.sql`
-      UPDATE subscriptions
-      SET status = ${statusMap[stripeStatus] ?? 'active'},
-          current_period_end = COALESCE(${periodEnd}, current_period_end),
-          cancel_at_period_end = ${Boolean(subscription.cancel_at_period_end)}
-      WHERE id = ${sub.id}`;
-
-    await this.deps.entitlements.invalidate(sub.organization_id);
-    await this.events.publish('entitlements.changed', {
-      org_id: sub.organization_id,
-      product_id: null,
-      version: Math.floor(Date.now() / 1000),
+    await this.sql.begin(async (tx) => {
+      await tx`
+        UPDATE subscriptions
+        SET status = ${STRIPE_STATUS_MAP[stripeStatus] ?? 'paused'},
+            current_period_end = COALESCE(${periodEnd}, current_period_end),
+            cancel_at_period_end = ${Boolean(subscription.cancel_at_period_end)}
+        WHERE id = ${sub.id}`;
+      await writeOutboxEvent<Extract<DomainEvent, { type: 'entitlements.changed' }>>(
+        tx,
+        'entitlements.changed',
+        { org_id: sub.organization_id, product_id: null, version: Math.floor(Date.now() / 1000) },
+        sub.organization_id
+      );
     });
+    await this.deps.entitlements.invalidate(sub.organization_id);
   }
 
   private async onSubscriptionDeleted(subscription: Record<string, unknown>): Promise<void> {
     const sub = await this.findByStripeSubscription(String(subscription.id));
     if (!sub) return;
 
-    await this.sql`
-      UPDATE subscriptions SET status = 'cancelled', ended_at = NOW() WHERE id = ${sub.id}`;
-    await this.sql`
-      UPDATE licenses SET status = 'expired'
-      WHERE subscription_id = ${sub.id} AND status = 'active'`;
-
+    await this.sql.begin(async (tx) => {
+      await tx`UPDATE subscriptions SET status = 'cancelled', ended_at = NOW() WHERE id = ${sub.id}`;
+      await tx`
+        UPDATE licenses SET status = 'expired'
+        WHERE subscription_id = ${sub.id} AND status = 'active'`;
+      await writeOutboxEvent<Extract<DomainEvent, { type: 'subscription.cancelled' }>>(
+        tx,
+        'subscription.cancelled',
+        { org_id: sub.organization_id, subscription_id: sub.id },
+        sub.organization_id
+      );
+      await writeOutboxEvent<Extract<DomainEvent, { type: 'entitlements.changed' }>>(
+        tx,
+        'entitlements.changed',
+        { org_id: sub.organization_id, product_id: null, version: Math.floor(Date.now() / 1000) },
+        sub.organization_id
+      );
+    });
     await this.deps.entitlements.invalidate(sub.organization_id);
-    await this.events.publish('subscription.cancelled', {
-      org_id: sub.organization_id,
-      subscription_id: sub.id,
-    });
-    await this.events.publish('entitlements.changed', {
-      org_id: sub.organization_id,
-      product_id: null,
-      version: Math.floor(Date.now() / 1000),
-    });
   }
 
   // -------------------------------------------------------------------------

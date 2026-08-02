@@ -13,6 +13,7 @@ Thumbs.db
 .vite/
 *.tmp
 .phpunit.cache/
+.phpunit.result.cache
 
 # Local env
 .env

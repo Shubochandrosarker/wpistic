@@ -6,8 +6,11 @@ import { addWebsiteSchema, connectWebsiteSchema, heartbeatSchema } from '@wpisti
 import type { AppContext } from '../../env';
 import { ApiError } from '../../errors';
 import { requireOrg, requireRole } from '../../middleware/tenant';
+import { getClientIp } from '../../middleware/correlation';
+import { normalizeDomain } from '../../utils/domain';
 import { WebsiteService } from './service';
-import { LicenseService } from '../licenses/service';
+import { makeLicenseService } from '../licenses/routes';
+import { evaluateLicenseLifecycle } from '../licenses/service';
 
 function svc(c: Context<AppContext>): WebsiteService {
   return new WebsiteService(c.get('sql'), c.get('events'));
@@ -32,7 +35,16 @@ websiteRoutes.post('/', zValidator('json', addWebsiteSchema), async (c) => {
 
 websiteRoutes.delete('/:websiteId', async (c) => {
   const { orgId } = requireRole(c, ['admin', 'product_manager']);
-  await svc(c).disconnect(orgId, c.req.param('websiteId'));
+  const websiteId = c.req.param('websiteId');
+  const service = svc(c);
+
+  const activeActivations = await service.listActiveActivationsForWebsite(websiteId);
+  await service.disconnect(orgId, websiteId);
+
+  const licenses = makeLicenseService(c);
+  for (const activation of activeActivations) {
+    await licenses.deactivateById(activation as never, 'website_disconnected', getClientIp(c), { type: 'user' });
+  }
   return c.body(null, 204);
 });
 
@@ -49,15 +61,25 @@ export const websiteConnectRoute = new Hono<AppContext>().post(
   zValidator('json', connectBodySchema),
   async (c) => {
     const body = c.req.valid('json');
-    const licenses = new LicenseService(c.get('sql'), c.get('events'), c.env.LICENSE_SIGNING_SECRET, c.env.SESSION_CACHE);
+    const licenses = makeLicenseService(c);
     const { license, activation } = await licenses.resolveActivationToken(body.activation_token);
-    if (activation.status !== 'active' || license.status !== 'active') {
-      throw ApiError.forbidden('License activation is not active');
+    if (activation.status !== 'active' || !evaluateLicenseLifecycle(license).usable) {
+      throw ApiError.forbidden('License is not usable right now');
     }
     if (license.product_slug !== body.product) {
       throw ApiError.forbidden('Activation token does not match this product');
     }
-    const result = await svc(c).connect(license.organization_id, license.product_id, body);
+    const normalized = normalizeDomain(body.domain);
+    if (!normalized || normalized !== activation.domain_normalized) {
+      throw ApiError.forbidden('Activation token does not match this domain');
+    }
+    if (body.environment !== activation.environment) {
+      throw ApiError.forbidden('Activation token does not match this environment');
+    }
+    const result = await svc(c).connect(
+      { organization_id: license.organization_id, product_id: license.product_id, max_websites: license.max_websites },
+      body
+    );
     return c.json(result, 201);
   }
 );
@@ -66,7 +88,8 @@ export const websiteHeartbeatRoute = new Hono<AppContext>().post(
   '/',
   zValidator('json', heartbeatSchema),
   async (c) => {
-    const result = await svc(c).heartbeat(c.req.valid('json'));
+    const token = c.req.header('X-Website-Token') ?? '';
+    const result = await svc(c).heartbeat(token, c.req.valid('json'));
     return c.json(result);
   }
 );

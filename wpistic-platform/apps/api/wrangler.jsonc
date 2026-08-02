@@ -4,6 +4,10 @@
   "compatibility_date": "2026-08-02",
   "compatibility_flags": ["nodejs_compat"],
   "routes": [{ "pattern": "api.wpistic.com", "custom_domain": true }],
+  "triggers": {
+    // Outbox publisher (events/outbox.ts) — every minute is the finest grain Cloudflare Cron Triggers support.
+    "crons": ["* * * * *"]
+  },
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
@@ -39,7 +43,9 @@
   // Secrets (set via `wrangler secret put <NAME>`):
   //   STRIPE_SECRET_KEY       — Stripe API key
   //   STRIPE_WEBHOOK_SECRET   — Stripe webhook signing secret
-  //   LICENSE_SIGNING_SECRET  — HMAC master key for license responses
+  //   LICENSE_SIGNING_SECRET  — HMAC master key for license response signatures
+  //   LICENSE_JWT_PRIVATE_KEY — RS256 private key (PKCS8 PEM) for activation tokens
+  //   LICENSE_JWT_PUBLIC_KEY  — RS256 public key (SPKI PEM) for activation tokens
   //   JWT_PUBLIC_KEY          — verifies access tokens from account.wpistic.com
   //   JWT_PRIVATE_KEY         — re-signs access tokens on org switch
   //   ADMIN_API_TOKEN         — bearer token for admin.wpistic.com server-side calls

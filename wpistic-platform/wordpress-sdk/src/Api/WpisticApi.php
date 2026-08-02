@@ -1,48 +1,82 @@
 <?php
 /**
  * HTTP client for api.wpistic.com using the WordPress HTTP API.
- * TLS verified, timeouts enforced, one retry on transient failures,
- * errors normalized to WP_Error with the platform's error codes.
+ * TLS verified, timeouts enforced, retries delegated to RetryHandler
+ * (network failure or 5xx only, never 4xx), errors normalized to
+ * WP_Error with the platform's error codes.
+ *
+ * @package WPistic\Sdk
  */
 
-namespace WPistic\Sdk;
+namespace WPistic\Sdk\Api;
 
 use WP_Error;
 
-class ApiClient {
+/**
+ * Default ApiClientInterface implementation backed by wp_remote_request().
+ */
+class WpisticApi implements ApiClientInterface {
 
-	/** @var string */
+	/**
+	 * The base API URL, without a trailing slash.
+	 *
+	 * @var string
+	 */
 	private $api_url;
 
-	/** @var string */
+	/**
+	 * The consuming product's slug, sent in the User-Agent header.
+	 *
+	 * @var string
+	 */
 	private $product_slug;
 
-	/** @var string */
+	/**
+	 * The consuming product's version, sent in the User-Agent header.
+	 *
+	 * @var string
+	 */
 	private $product_version;
 
-	public function __construct( string $api_url, string $product_slug, string $product_version ) {
+	/**
+	 * The retry policy applied to every request.
+	 *
+	 * @var RetryHandler
+	 */
+	private $retry;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param string            $api_url         The base API URL.
+	 * @param string            $product_slug    The consuming product's slug.
+	 * @param string            $product_version The consuming product's version.
+	 * @param RetryHandler|null $retry           Optional retry policy override; defaults to a new RetryHandler.
+	 */
+	public function __construct( string $api_url, string $product_slug, string $product_version, ?RetryHandler $retry = null ) {
 		$this->api_url         = rtrim( $api_url, '/' );
 		$this->product_slug    = $product_slug;
 		$this->product_version = $product_version;
+		$this->retry           = $retry ?? new RetryHandler();
 	}
 
 	/**
 	 * POST JSON to a platform endpoint.
 	 *
-	 * @param string               $path e.g. '/api/v1/licenses/activate'.
-	 * @param array<string,mixed>  $body
-	 * @param array<string,string> $headers
+	 * @param string               $path    e.g. '/api/v1/licenses/activate'.
+	 * @param array<string,mixed>  $body    The request body.
+	 * @param array<string,string> $headers Extra request headers.
 	 * @return array<string,mixed>|WP_Error Decoded JSON on success.
 	 */
 	public function post( string $path, array $body = array(), array $headers = array() ) {
-		return $this->request( 'POST', $path, $body, $headers );
+		return $this->request( 'POST', $this->api_url . $path, $body, $headers );
 	}
 
 	/**
 	 * GET a platform endpoint.
 	 *
-	 * @param string               $path
-	 * @param array<string,string> $query
+	 * @param string               $path  The API path, relative to the base URL.
+	 * @param array<string,string> $query Query string parameters.
 	 * @return array<string,mixed>|WP_Error
 	 */
 	public function get( string $path, array $query = array() ) {
@@ -50,20 +84,19 @@ class ApiClient {
 		if ( ! empty( $query ) ) {
 			$url = add_query_arg( array_map( 'rawurlencode', $query ), $url );
 		}
-		return $this->request( 'GET', $url, null, array(), true );
+		return $this->request( 'GET', $url, null, array() );
 	}
 
 	/**
-	 * @param string                    $method
-	 * @param string                    $path_or_url
-	 * @param array<string,mixed>|null  $body
-	 * @param array<string,string>      $headers
-	 * @param bool                      $is_absolute
+	 * Perform the HTTP request, with retries, and normalize the result.
+	 *
+	 * @param string                   $method  The HTTP method.
+	 * @param string                   $url     The full request URL.
+	 * @param array<string,mixed>|null $body    The request body, or null for none.
+	 * @param array<string,string>     $headers Extra request headers.
 	 * @return array<string,mixed>|WP_Error
 	 */
-	private function request( string $method, string $path_or_url, $body = null, array $headers = array(), bool $is_absolute = false ) {
-		$url = $is_absolute ? $path_or_url : $this->api_url . $path_or_url;
-
+	private function request( string $method, string $url, $body, array $headers ) {
 		$args = array(
 			'method'      => $method,
 			'timeout'     => 15,
@@ -89,11 +122,15 @@ class ApiClient {
 			$args['body'] = wp_json_encode( $body );
 		}
 
-		$response = wp_remote_request( $url, $args );
-
-		// One retry on network failure or 5xx — never on 4xx.
-		if ( is_wp_error( $response ) || wp_remote_retrieve_response_code( $response ) >= 500 ) {
+		$attempt = 0;
+		while ( true ) {
+			++$attempt;
 			$response = wp_remote_request( $url, $args );
+
+			if ( ! $this->retry->should_retry( $attempt, $response ) ) {
+				break;
+			}
+			usleep( $this->retry->delay_for_attempt( $attempt ) * 1000000 );
 		}
 
 		if ( is_wp_error( $response ) ) {
@@ -120,6 +157,11 @@ class ApiClient {
 		return $json;
 	}
 
+	/**
+	 * Generate a per-request correlation ID for the X-Correlation-Id header.
+	 *
+	 * @return string
+	 */
 	private static function correlation_id(): string {
 		if ( function_exists( 'wp_generate_uuid4' ) ) {
 			return wp_generate_uuid4();

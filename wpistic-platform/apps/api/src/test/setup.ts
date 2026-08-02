@@ -8,6 +8,7 @@ import type { Sql } from 'postgres';
 export function createMockSql(): Sql {
   const sql = vi.fn() as any;
   sql.begin = vi.fn(async (fn) => fn(sql));
+  sql.json = vi.fn((value: unknown) => value);
   return sql;
 }
 

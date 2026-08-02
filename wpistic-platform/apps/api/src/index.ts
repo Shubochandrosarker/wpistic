@@ -15,6 +15,7 @@ import { createDb } from './db';
 import { errorResponse } from './errors';
 import { EventBus } from './events/bus';
 import { handleQueueBatch } from './events/handlers';
+import { publishOutboxBatch } from './events/outbox';
 import { correlationId, requestLogger } from './middleware/correlation';
 import { rateLimiter } from './middleware/rate-limit';
 import { jwtAuth } from './middleware/auth';
@@ -24,7 +25,8 @@ import { auditMiddleware } from './middleware/audit';
 import { meRoutes, memberRoutes, invitationRoutes, invitationAcceptRoute } from './modules/identity/routes';
 import { apiKeyRoutes } from './modules/identity/api-keys';
 import { orgRoutes, authRoutes } from './modules/orgs/routes';
-import { productRoutes, orgProductRoutes, downloadRoutes, handleProductUpdates } from './modules/catalog/routes';
+import { productRoutes, orgProductRoutes } from './modules/catalog/routes';
+import { downloadRoutes, handleProductUpdates } from './modules/updates/routes';
 import { entitlementRoutes } from './modules/entitlements/routes';
 import {
   licenseRoutes,
@@ -137,4 +139,30 @@ app.route('/api/v1/admin', adminRoutes);
 export default {
   fetch: app.fetch,
   queue: (batch: MessageBatch<EventEnvelope>, env: Env, ctx: ExecutionContext) => handleQueueBatch(batch, env, ctx),
+  scheduled: (_event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
+    ctx.waitUntil(runOutboxPublisher(env));
+  },
 };
+
+/** Cron trigger (wrangler.jsonc `crons`, every minute) — drains the transactional outbox onto the real queue. */
+async function runOutboxPublisher(env: Env): Promise<void> {
+  const sql = createDb(env);
+  try {
+    const result = await publishOutboxBatch(sql, env.EVENT_BUS, (row) => {
+      console.error(
+        JSON.stringify({
+          level: 'error',
+          message: 'outbox event exhausted retries — see event_outbox for the dead-lettered row',
+          outbox_id: row.id,
+          event_type: row.eventType,
+          error: row.error,
+        })
+      );
+    });
+    if (result.published || result.retried || result.exhausted) {
+      console.log(JSON.stringify({ level: 'info', message: 'outbox publish cycle', ...result }));
+    }
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+}

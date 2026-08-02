@@ -83,6 +83,20 @@ export class StripeClient {
       cancel_at_period_end: true,
     });
   }
+
+  resumeSubscription(subscriptionId: string) {
+    return this.request<Record<string, unknown>>('POST', `/subscriptions/${subscriptionId}`, {
+      cancel_at_period_end: false,
+    });
+  }
+
+  /** Prorated upgrade/downgrade: swap the (single) subscription item to a new price. */
+  updateSubscriptionItemPrice(subscriptionId: string, subscriptionItemId: string, newStripePriceId: string) {
+    return this.request<Record<string, unknown>>('POST', `/subscriptions/${subscriptionId}`, {
+      items: [{ id: subscriptionItemId, price: newStripePriceId }],
+      proration_behavior: 'create_prorations',
+    });
+  }
 }
 
 /** Verify a Stripe-Signature header: t=<ts>,v1=<hex hmac of `${t}.${payload}`>. */

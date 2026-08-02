@@ -8,7 +8,7 @@ import { ApiError } from '../../errors';
 import { requireOrg } from '../../middleware/tenant';
 import { idempotency } from '../../middleware/idempotency';
 import { CreditService } from './service';
-import { LicenseService } from '../licenses/service';
+import { makeLicenseService } from '../licenses/routes';
 
 function svc(c: Context<AppContext>): CreditService {
   return new CreditService(c.get('sql'), c.get('events'));
@@ -51,12 +51,7 @@ export const usageEventRoutes = new Hono<AppContext>().post(
     // Resolve the paying organization from the strongest available credential.
     let orgId = c.get('orgId') ?? c.get('tokenOrgId') ?? null;
     if (!orgId && body.activation_token) {
-      const licenses = new LicenseService(
-        c.get('sql'),
-        c.get('events'),
-        c.env.LICENSE_SIGNING_SECRET,
-        c.env.SESSION_CACHE
-      );
+      const licenses = makeLicenseService(c);
       const { license, activation } = await licenses.resolveActivationToken(body.activation_token);
       if (activation.status !== 'active') throw ApiError.forbidden('Activation is not active');
       orgId = license.organization_id;

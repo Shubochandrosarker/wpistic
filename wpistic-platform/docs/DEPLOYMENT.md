@@ -78,6 +78,8 @@ wrangler secret put MFA_ENC_KEY --env production
 ```bash
 HYPERDRIVE_CONNECTION_STRING=postgresql://user:pass@host:5432/wpistic
 LICENSE_SIGNING_SECRET="$(openssl rand -hex 32)"
+LICENSE_JWT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n..."   # RS256, PKCS8 PEM — distinct keypair from JWT_PRIVATE_KEY
+LICENSE_JWT_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n..."     # RS256, SPKI PEM
 ADMIN_API_TOKEN="$(openssl rand -hex 32)"
 ADMIN_EMAILS="admin@company.com,support@company.com"
 STRIPE_SECRET_KEY="sk_test_..."
@@ -89,10 +91,24 @@ LICENSE_GRACE_PERIOD_DAYS=7
 DOWNLOAD_URL_TTL_SECONDS=900
 ```
 
+`LICENSE_JWT_PRIVATE_KEY`/`LICENSE_JWT_PUBLIC_KEY` sign/verify plugin
+activation tokens (RS256) — generate a keypair the same way as the shared
+JWT pair above, but keep it **separate**: mixing audiences across a shared
+RSA keypair lets a token minted for one system be replayed against the
+other.
+
+```bash
+openssl genrsa -out license_private_key.pem 2048
+openssl pkcs8 -topk8 -nocrypt -in license_private_key.pem -out license_private_key_pkcs8.pem
+openssl rsa -in license_private_key.pem -pubout -out license_public_key.pem
+```
+
 Deploy secrets:
 ```bash
 cd apps/api
 wrangler secret put LICENSE_SIGNING_SECRET --env production
+wrangler secret put LICENSE_JWT_PRIVATE_KEY --env production < license_private_key_pkcs8.pem
+wrangler secret put LICENSE_JWT_PUBLIC_KEY --env production < license_public_key.pem
 wrangler secret put ADMIN_API_TOKEN --env production
 wrangler secret put ADMIN_EMAILS --env production
 wrangler secret put STRIPE_SECRET_KEY --env production
@@ -149,13 +165,29 @@ wrangler r2 bucket create wpistic-assets
 
 #### Hyperdrive
 
-Create a Hyperdrive database binding in Cloudflare dashboard or CLI:
+Create a Hyperdrive database binding in Cloudflare dashboard or CLI. Point it
+at the restricted `wpistic_app` role (created by migration `012`), not the
+schema-owning role — Row Level Security only binds to a non-owner role (see
+migration `0010`'s note); connecting as the owner silently bypasses RLS
+entirely.
 
 ```bash
-wrangler hyperdrive create wpistic-db --connection-string postgresql://user:pass@host:5432/wpistic
+wrangler hyperdrive create wpistic-db --connection-string postgresql://wpistic_app:<password>@host:5432/wpistic
 ```
 
-Update `wrangler.jsonc` with the Hyperdrive ID.
+Update `wrangler.jsonc` with the Hyperdrive ID. Also set a real password for
+`wpistic_app` in production — migration `012` creates the role with a
+placeholder password:
+```sql
+ALTER ROLE wpistic_app PASSWORD '<a real generated secret>';
+```
+
+#### Cron Trigger (outbox publisher)
+
+No manual setup needed — `apps/api/wrangler.jsonc` already declares
+`"crons": ["* * * * *"]`, wired to the `scheduled` export in
+`apps/api/src/index.ts`. It runs automatically once the Worker is deployed;
+verify it in the Cloudflare dashboard under Workers → Triggers.
 
 ### 4. DNS & Route Configuration
 
@@ -214,34 +246,39 @@ Services run on:
 
 ```bash
 # 1. Create an org + user via account service
-# 2. Issue a license via admin API
-curl -X POST http://localhost:8787/api/v1/admin/licenses \
+# 2. Grant complimentary access via the admin API (issues a license for
+#    plugin products; see modules/admin/routes.ts POST /organizations/:orgId/grant)
+curl -X POST http://localhost:8787/api/v1/admin/organizations/your-org-id/grant \
   -H "X-Admin-API-Token: $(cat apps/api/.dev.vars | grep ADMIN_API_TOKEN | cut -d= -f2)" \
   -H "Content-Type: application/json" \
   -d '{
-    "organization_id": "your-org-id",
-    "product_id": "your-product-id",
-    "plan_id": "your-plan-id",
-    "max_activations": 5
+    "product_slug": "seoistic",
+    "plan_slug": "professional",
+    "reason": "manual QA license for local testing"
   }'
 
 # 3. Activate license from "plugin"
 curl -X POST http://localhost:8787/api/v1/licenses/activate \
   -H "Content-Type: application/json" \
   -d '{
-    "key": "productname_abc123...",
+    "key": "seoistic_3f9a2b7c1d8e4f60a1b2c3d4e5f60718",
     "domain": "example.com",
     "installation_uuid": "test-install-123",
     "wp_version": "6.6",
     "php_version": "8.2",
-    "plugin_version": "1.0.0"
+    "product_version": "1.0.0"
   }'
 
-# 4. Validate license
+# 4. Validate license — domain/environment/installation_uuid must match the
+#    activation exactly, or the server rejects it with 403.
 curl -X POST http://localhost:8787/api/v1/licenses/validate \
   -H "Content-Type: application/json" \
   -d '{
-    "activation_token": "eyJ..."
+    "activation_token": "eyJ...",
+    "domain": "example.com",
+    "environment": "production",
+    "installation_uuid": "test-install-123",
+    "plugin_version": "1.0.0"
   }'
 ```
 

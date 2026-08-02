@@ -1,7 +1,7 @@
 /**
  * Domain normalization for license activations and the website registry.
- * Lowercase, strip protocol/credentials/path, strip default ports and
- * trailing dots, normalize www. Local/staging environments are detected so
+ * Lowercase, strip protocol/credentials/path, strip ports and trailing
+ * dots, normalize www. Local/staging environments are detected so
  * they can be handled with separate activation rules.
  */
 import type { SiteEnvironment } from '@wpistic/types';
@@ -11,7 +11,7 @@ export function normalizeDomain(input: string): string {
   domain = domain.replace(/^[a-z][a-z0-9+.-]*:\/\//, ''); // protocol
   domain = domain.replace(/^[^@/]+@/, ''); // credentials
   domain = domain.split('/')[0]!.split('?')[0]!.split('#')[0]!; // path/query/fragment
-  domain = domain.replace(/:(80|443)$/, ''); // default ports
+  domain = domain.replace(/:\d+$/, ''); // port
   domain = domain.replace(/\.+$/, ''); // trailing dots
   if (domain.startsWith('www.') && domain.length > 8) domain = domain.slice(4);
   return domain;
