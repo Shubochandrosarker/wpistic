@@ -1,0 +1,9 @@
+---
+import { completeAdminLogin } from '../../lib/auth';
+try {
+  const returnTo = await completeAdminLogin(Astro.request, Astro.cookies, Astro.locals.runtime.env);
+  if (returnTo) return Astro.redirect(returnTo, 302);
+} catch {
+  return Astro.redirect('/login?error=oauth', 302);
+}
+---

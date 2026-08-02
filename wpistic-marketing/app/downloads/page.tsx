@@ -28,8 +28,8 @@ export default function DownloadsPage() {
           />
           <p className="mt-4 text-[14.5px] text-ink-500">
             Don&apos;t have an account yet?{" "}
-            <a href="/pricing" className="font-semibold text-purple-600 hover:text-purple-700">
-              See plans and start a free trial
+            <a href="/register" className="font-semibold text-purple-600 hover:text-purple-700">
+              See products and start free
             </a>
             .
           </p>
@@ -77,15 +77,15 @@ export default function DownloadsPage() {
       <Section>
         <Container className="text-center">
           <h2 className="font-display mx-auto max-w-xl text-3xl font-extrabold tracking-tight text-balance text-ink-900 sm:text-4xl">
-            Need a plan before you can download?
+            Need free access before you can download?
           </h2>
           <p className="mx-auto mt-4 max-w-md text-lg text-ink-600">
-            Every plan includes a 14-day free trial of the full suite, so you can install and try a
+            Start with card-free access to a free product, so you can install and try a
             product before you commit.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <Button href="/pricing" variant="green" size="lg" icon="arrow">
-              View pricing
+            <Button href="/register" variant="green" size="lg" icon="arrow">
+              Start free
             </Button>
           </div>
         </Container>

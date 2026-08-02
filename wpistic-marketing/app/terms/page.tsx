@@ -47,7 +47,7 @@ export default function TermsOfServicePage() {
         </h2>
         <p className="text-ink-600 leading-relaxed mb-4">
           {site.name} is a suite of WordPress-native products — including Chatbotistic, Memberistic,
-          Bookingistic, Insightistic, WPAgentistic, Postistic, CRMistic, and Licenseistic, among
+          Bookingistic, Insightistic, SEOistic, Postistic, CRMistic, and Licenseistic, among
           others — unified by a single customer dashboard, billing account, and login. Each product
           is delivered as a WordPress plugin activated on your own WordPress site(s), paired with
           cloud-hosted services (such as AI processing, analytics storage, and license
@@ -167,7 +167,7 @@ export default function TermsOfServicePage() {
           WHETHER EXPRESS, IMPLIED, OR STATUTORY, INCLUDING WITHOUT LIMITATION ANY WARRANTIES OF
           MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, OR NON-INFRINGEMENT. We do not
           warrant that the Services will be uninterrupted, error-free, or that AI-generated content
-          from Chatbotistic, WPAgentistic, or Postistic will always be accurate — outputs from AI
+          from Chatbotistic, SEOistic, or Postistic will always be accurate — outputs from AI
           features should be reviewed before being relied upon in customer-facing or business-critical
           contexts.
         </p>

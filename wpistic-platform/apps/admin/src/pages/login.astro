@@ -1,0 +1,5 @@
+---
+import { beginAdminLogin } from '../lib/auth';
+const url = await beginAdminLogin(Astro.request, Astro.cookies, Astro.locals.runtime.env);
+if (url) return Astro.redirect(url, 302);
+---

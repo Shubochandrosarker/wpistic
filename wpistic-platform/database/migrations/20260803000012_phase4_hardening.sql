@@ -79,7 +79,9 @@ UPDATE websites SET display_domain = domain_normalized WHERE display_domain IS N
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'wpistic_app') THEN
-        CREATE ROLE wpistic_app LOGIN PASSWORD 'change-me-in-production';
+        CREATE ROLE wpistic_app NOLOGIN;
+    ELSE
+        ALTER ROLE wpistic_app NOLOGIN;
     END IF;
 END $$;
 

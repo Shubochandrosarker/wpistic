@@ -43,7 +43,10 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 RUN_ID="$(openssl rand -hex 4)"
 DOMAIN="e2e-${RUN_ID}.example.com"
 INSTALL_UUID="$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen)"
-E2E_VERSION="99.${RANDOM}.0"
+# Use a timestamp-based release component so repeated local runs always create
+# a version newer than seeded/prior E2E packages. A random 99.x version can be
+# lower than a package left by an earlier run, making the update assertion flaky.
+E2E_VERSION="99.$(date +%s).0"
 
 # ---------------------------------------------------------------------------
 step "0. API is up"
@@ -148,6 +151,11 @@ AUTHORIZE="$(curl -sf -X POST "$API_URL/api/v1/downloads/authorize" -H 'Content-
 }")" || fail "authorize download"
 DL_URL="$(jq -r '.download_url' <<<"$AUTHORIZE")"
 [[ "$DL_URL" == *"token=dl_"* ]] || fail "no dl_ token in download_url: $AUTHORIZE"
+# In the Compose test container, the API's public localhost origin points at
+# the test container itself. Keep the public response contract, but target the
+# injected service URL for this in-network verification request.
+DL_PATH="/${DL_URL#*://*/}"
+DL_URL="${API_URL%/}$DL_PATH"
 ok "download authorized with activation token alone"
 
 # ---------------------------------------------------------------------------
@@ -188,7 +196,10 @@ GRACE="$(curl -sf -X POST "$API_URL/api/v1/licenses/validate" -H 'Content-Type: 
 [ "$(jq -r '.status' <<<"$GRACE")" = "grace_period" ] || fail "expected grace_period, got: $(jq -c . <<<"$GRACE")"
 ok "1 day past expiry → grace_period"
 
-sql "UPDATE licenses SET expires_at = NOW() - INTERVAL '8 days' WHERE id = '$LICENSE_ID'" >/dev/null
+# Advance both timestamps to simulate the fixed grace deadline passing. The
+# service intentionally pins grace_period_ends_at on first observation rather
+# than recalculating a moving window from expires_at.
+sql "UPDATE licenses SET expires_at = NOW() - INTERVAL '8 days', grace_period_ends_at = NOW() - INTERVAL '1 day' WHERE id = '$LICENSE_ID'" >/dev/null
 PAST="$(curl -s -X POST "$API_URL/api/v1/licenses/validate" -H 'Content-Type: application/json' -d "{
   \"activation_token\": \"$TOKEN\", \"domain\": \"$DOMAIN\",
   \"environment\": \"production\", \"installation_uuid\": \"$INSTALL_UUID\"}")"

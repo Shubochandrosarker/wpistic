@@ -103,6 +103,12 @@ export class OrgService {
         FROM licenses l
         WHERE l.organization_id = ${orgId} AND l.status = 'active'
           AND (l.expires_at IS NULL OR l.expires_at > NOW())
+        UNION ALL
+        SELECT g.product_id, g.plan_id, 'access_grant' AS source, g.status AS sub_status, g.created_at
+        FROM product_access_grants g
+        WHERE g.organization_id = ${orgId} AND g.status = 'active'
+          AND g.starts_at <= NOW()
+          AND (g.ends_at IS NULL OR g.ends_at > NOW())
       ) src
       JOIN products p ON p.id = src.product_id
       JOIN plans pl ON pl.id = src.plan_id

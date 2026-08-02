@@ -1,6 +1,6 @@
 /**
- * Admin module (admin.wpistic.com backend). Auth: the admin portal's
- * server-side ADMIN_API_TOKEN, or a staff JWT whose email is in ADMIN_EMAILS.
+ * Admin module (admin.wpistic.com backend). Auth: a staff JWT whose email is
+ * in ADMIN_EMAILS and whose scope includes `admin`.
  * Impersonation additionally demands a fresh MFA code and a written reason,
  * and mints a 30-minute restricted token; every admin mutation is audited
  * with actor_type='admin'.
@@ -16,24 +16,44 @@ import { ApiError } from '../../errors';
 import { getClientIp } from '../../middleware/correlation';
 import { decryptMfaSecret, verifyTotpCode } from '../../utils/totp';
 import { makeLicenseService } from '../licenses/routes';
-import { resolveAdminRole } from '../../middleware/auth';
 import { EntitlementService } from '../entitlements/service';
 import { makeBillingService } from '../billing/routes';
 import { packageRoutes } from '../updates/routes';
 
 const requireAdmin: MiddlewareHandler<AppContext> = async (c, next) => {
   const kind = c.get('authKind');
-  if (kind === 'admin_token') return next();
+  if (kind === 'admin_token' && c.env.ALLOW_LEGACY_ADMIN_TOKEN === 'true') return next();
   if (kind === 'jwt') {
     const email = c.get('user')?.email?.toLowerCase();
     const allowlist = c.env.ADMIN_EMAILS.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
-    if (email && allowlist.includes(email)) {
-      c.set('adminRole', resolveAdminRole(c.req.header('X-Admin-Role')));
+    const scopes = c.get('scopes') ?? [];
+    if (email && allowlist.includes(email) && scopes.includes('admin')) {
+      const configuredRole = c.env.ADMIN_ROLES?.split(',')
+        .map((pair) => pair.trim().split('=', 2))
+        .find(([configuredEmail]) => configuredEmail?.toLowerCase() === email)?.[1];
+      c.set('adminRole', configuredRole ?? 'support_agent');
       return next();
     }
   }
   throw ApiError.forbidden('Admin access required');
 };
+
+/** High-risk mutations require a fresh TOTP code in addition to the staff JWT. */
+async function requireFreshMfa(c: Context<AppContext>, code: string | undefined): Promise<void> {
+  const admin = c.get('user');
+  if (!admin || !code) throw ApiError.forbidden('Fresh MFA is required for this action');
+  const rows = await c.get('sql')<{ mfa_enabled: boolean; mfa_secret: string | null }[]>`
+    SELECT mfa_enabled, mfa_secret FROM users WHERE id = ${admin.id} LIMIT 1`;
+  const user = rows[0];
+  if (!user?.mfa_enabled || !user.mfa_secret) throw ApiError.forbidden('Staff MFA must be enabled');
+  let secret: string;
+  try {
+    secret = await decryptMfaSecret(user.mfa_secret, c.env.MFA_ENC_KEY);
+  } catch {
+    throw ApiError.forbidden('Staff MFA configuration is invalid');
+  }
+  if (!(await verifyTotpCode(secret, code))) throw ApiError.unauthorized('MFA code is invalid or expired');
+}
 
 async function adminAudit(
   c: Context<AppContext>,
@@ -192,6 +212,7 @@ adminRoutes.post('/licenses/:licenseId/action', zValidator('json', adminLicenseA
   const sql = c.get('sql');
   const licenseId = c.req.param('licenseId');
   const { action, reason } = c.req.valid('json');
+  await requireFreshMfa(c, c.req.valid('json').mfa_code);
   const admin = c.get('user');
   const actor = { type: 'admin' as const, id: admin?.id ?? null, email: admin?.email ?? null };
 
@@ -261,11 +282,12 @@ adminRoutes.get('/subscriptions', async (c) => {
   return c.json({ subscriptions });
 });
 
-adminRoutes.post('/subscriptions/:subscriptionId/cancel', zValidator('json', z.object({ reason: z.string().min(3).max(500) })), async (c) => {
+adminRoutes.post('/subscriptions/:subscriptionId/cancel', zValidator('json', z.object({ reason: z.string().min(3).max(500), mfa_code: z.string().min(6).max(10) })), async (c) => {
   const sql = c.get('sql');
   const rows = await sql<{ id: string; organization_id: string }[]>`
     SELECT id, organization_id FROM subscriptions WHERE id = ${c.req.param('subscriptionId')} LIMIT 1`;
   if (!rows[0]) throw ApiError.notFound('Subscription');
+  await requireFreshMfa(c, c.req.valid('json').mfa_code);
   const subscription = await makeBillingService(c).cancelSubscription(rows[0].organization_id, rows[0].id);
   await adminAudit(c, 'subscription.cancel', 'subscriptions', rows[0].id, rows[0].organization_id, c.req.valid('json'));
   return c.json({ subscription });
@@ -326,6 +348,8 @@ adminRoutes.get('/system', async (c) => {
 
 /** Replay a stored (failed) Stripe webhook event. */
 adminRoutes.post('/webhooks/:eventId/retry', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { mfa_code?: string };
+  await requireFreshMfa(c, body.mfa_code);
   const sql = c.get('sql');
   const rows = await sql<Array<{ id: string; provider_event_id: string; payload: { type: string; data: { object: Record<string, unknown> } } }>>`
     SELECT id, provider_event_id, payload FROM webhook_events
@@ -358,12 +382,14 @@ adminRoutes.post(
       plan_slug: z.string().min(1),
       reason: z.string().min(10).max(500),
       expires_at: z.string().datetime().optional(),
+      mfa_code: z.string().min(6).max(10),
     })
   ),
   async (c) => {
     const sql = c.get('sql');
     const orgId = c.req.param('orgId');
     const body = c.req.valid('json');
+    await requireFreshMfa(c, body.mfa_code);
 
     const rows = await sql<Array<{ product_id: string; plan_id: string; product_type: string }>>`
       SELECT p.id AS product_id, pl.id AS plan_id, p.type AS product_type

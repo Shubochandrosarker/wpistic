@@ -22,7 +22,7 @@ export default function SolutionsPage() {
           <SectionHeading
             eyebrow="Solutions"
             title="WPistic for however you build on WordPress"
-            description="The same eleven products, recommended differently depending on who's running them — an agency managing client sites needs a different starting point than a solo freelancer or an enterprise IT team."
+            description="The same fifteen products, recommended differently depending on who's running them — an agency managing client sites needs a different starting point than a solo freelancer or an enterprise IT team."
             align="center"
           />
           <div className="mt-8 flex flex-wrap justify-center gap-2">

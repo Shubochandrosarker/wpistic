@@ -6,7 +6,6 @@ import type { AppContext } from '../../env';
 import { DOWNLOAD_URL_TTL_SECONDS } from '../../env';
 import { ApiError } from '../../errors';
 import { makeLicenseService } from '../licenses/routes';
-import { evaluateLicenseLifecycle } from '../licenses/service';
 import { UpdatesService, createDownloadGrant, resolveDownloadGrant } from './service';
 
 function svc(c: Context<AppContext>): UpdatesService {
@@ -38,7 +37,7 @@ export async function handleProductUpdates(c: Context<AppContext>) {
     throw ApiError.forbidden('Activation token does not match this installation');
   }
 
-  const lifecycle = evaluateLicenseLifecycle(license);
+  const lifecycle = await licenses.ensureLifecycleFreshForRequest(license);
   if (!lifecycle.usable || activation.status !== 'active') {
     throw ApiError.forbidden('This license is not authorized for updates');
   }
@@ -104,7 +103,7 @@ downloadRoutes.post('/authorize', zValidator('json', downloadAuthorizeSchema), a
 
   if (license.product_slug !== body.product_slug) throw ApiError.forbidden('License does not cover this product');
 
-  const lifecycle = evaluateLicenseLifecycle(license);
+  const lifecycle = await licenses.ensureLifecycleFreshForRequest(license);
   if (!lifecycle.usable || activation.status !== 'active') {
     throw ApiError.forbidden('This license is not eligible for downloads');
   }
@@ -123,7 +122,7 @@ downloadRoutes.post('/authorize', zValidator('json', downloadAuthorizeSchema), a
     DOWNLOAD_URL_TTL_SECONDS
   );
 
-  const origin = new URL(c.req.url).origin;
+  const origin = c.env.PUBLIC_API_URL.replace(/\/$/, '');
   return c.json({
     download_url: `${origin}/api/v1/downloads/file?token=${token}`,
     expires_in: DOWNLOAD_URL_TTL_SECONDS,

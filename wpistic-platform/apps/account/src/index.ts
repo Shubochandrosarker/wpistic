@@ -71,7 +71,7 @@ app.use('*', async (c, next) => {
   try {
     await next();
   } finally {
-    c.executionCtx.waitUntil(sql.end({ timeout: 5 }));
+    await sql.end({ timeout: 1 }).catch(() => undefined);
   }
 });
 

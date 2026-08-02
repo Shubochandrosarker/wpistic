@@ -53,7 +53,7 @@ export default function BundlesPage() {
               <p className="mt-4 text-[15px] leading-relaxed text-ink-300">
                 {bundleExampleProducts.map((p) => p.name).join(" + ")} bought separately costs $
                 {bundleExampleTotal}/mo standalone. The {professionalTier.name} plan includes all
-                eleven products — including those three — from ${professionalTier.annualPrice}/mo
+                fifteen products — including those three — from ${professionalTier.annualPrice}/mo
                 billed annually.
               </p>
             </div>
@@ -73,7 +73,7 @@ export default function BundlesPage() {
               </div>
               <div className="flex items-center justify-between rounded-2xl border border-green-400/40 bg-green-500/10 px-5 py-3.5">
                 <span className="text-sm font-bold text-white">
-                  {professionalTier.name} plan (all 11 products, billed annually)
+                  {professionalTier.name} plan (all 15 products, billed annually)
                 </span>
                 <span className="text-sm font-bold text-green-400">
                   ${professionalTier.annualPrice}/mo

@@ -30,10 +30,13 @@ jobs:
         run: npm ci
 
       - name: Typecheck workspaces
-        run: npm run typecheck --workspace @wpistic/types --workspace @wpistic/auth-sdk --workspace @wpistic/platform-sdk --workspace @wpistic/account --workspace @wpistic/api --workspace @wpistic/dashboard
+        run: npm run typecheck --workspace @wpistic/types --workspace @wpistic/auth-sdk --workspace @wpistic/platform-sdk --workspace @wpistic/account --workspace @wpistic/api --workspace @wpistic/dashboard --workspace @wpistic/admin
 
       - name: API tests
         run: npm --workspace @wpistic/api run test -- --run
+
+      - name: Platform SDK tests
+        run: npm --workspace @wpistic/platform-sdk run test
 
       - name: Dashboard build
         run: npm --workspace @wpistic/dashboard run build
@@ -47,6 +50,66 @@ jobs:
       - name: Bundle account worker (dry run)
         run: npx wrangler deploy --dry-run --outdir /tmp/account-build
         working-directory: wpistic-platform/apps/account
+
+  staging-config:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wpistic-platform
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: wpistic-platform/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate throwaway staging environment
+        run: npm run staging:env -- --force
+
+      - name: Validate the complete staging compose graph
+        run: docker compose --env-file .env.staging -f docker-compose.staging.yml config --quiet
+
+  staging-smoke:
+    needs: [verify, migration-validation, staging-config]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: wpistic-platform
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: wpistic-platform/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate throwaway staging environment
+        run: npm run staging:env -- --force
+
+      - name: Start local staging stack
+        run: docker compose --env-file .env.staging -f docker-compose.staging.yml up -d --build
+
+      - name: Run breadth smoke checks
+        run: npm run staging:smoke
+
+      - name: Run API, golden-path, and cross-language checks
+        run: docker compose --env-file .env.staging -f docker-compose.staging.yml --profile tools run --rm tests
+
+      - name: Tear down staging stack
+        if: always()
+        run: docker compose --env-file .env.staging -f docker-compose.staging.yml down -v
 
   migration-validation:
     runs-on: ubuntu-latest

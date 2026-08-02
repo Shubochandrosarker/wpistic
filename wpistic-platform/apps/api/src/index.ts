@@ -63,7 +63,7 @@ app.use(
       'http://localhost:4321',
     ],
     credentials: true,
-    allowHeaders: ['Content-Type', 'Authorization', 'X-Idempotency-Key', 'X-Correlation-Id', 'X-Organization-Id', 'X-Admin-Role'],
+    allowHeaders: ['Content-Type', 'Authorization', 'X-Idempotency-Key', 'X-Correlation-Id', 'X-Organization-Id'],
     exposeHeaders: ['X-Correlation-Id', 'X-RateLimit-Limit', 'X-RateLimit-Remaining'],
   })
 );
@@ -86,7 +86,7 @@ app.use('*', async (c, next) => {
   try {
     await next();
   } finally {
-    c.executionCtx.waitUntil(sql.end({ timeout: 5 }));
+    await sql.end({ timeout: 1 }).catch(() => undefined);
   }
 });
 
@@ -159,10 +159,10 @@ async function runOutboxPublisher(env: Env): Promise<void> {
         })
       );
     });
-    if (result.published || result.retried || result.exhausted) {
-      console.log(JSON.stringify({ level: 'info', message: 'outbox publish cycle', ...result }));
-    }
+      if (result.published || result.retried || result.exhausted) {
+        console.log(JSON.stringify({ level: 'info', message: 'outbox publish cycle', ...result }));
+      }
   } finally {
-    await sql.end({ timeout: 5 });
+    await sql.end({ timeout: 1 }).catch(() => undefined);
   }
 }

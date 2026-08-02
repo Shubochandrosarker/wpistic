@@ -29,7 +29,7 @@ export async function handleQueueBatch(batch: MessageBatch<EventEnvelope>, env: 
   try {
     await processBatch(batch.messages, sql, env);
   } finally {
-    ctx.waitUntil(sql.end({ timeout: 5 }));
+    await sql.end({ timeout: 1 }).catch(() => undefined);
   }
 }
 

@@ -1,0 +1,16 @@
+# Shell scripts and container entrypoints must keep LF endings regardless of
+# the developer's core.autocrlf setting. Without this, a Windows clone rewrites
+# them to CRLF and every one of them fails inside Linux containers with
+# `set: pipefail: invalid option name` (the \r ends up part of the argument).
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+Dockerfile.*    text eol=lf
+*.bash          text eol=lf
+entrypoint.sh   text eol=lf
+
+# Compose/CI configs are read by Linux tooling too.
+*.yml           text eol=lf
+*.yaml          text eol=lf
+
+# Let git normalize everything else in the working tree per-platform.
+* text=auto

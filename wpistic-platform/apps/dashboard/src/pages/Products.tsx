@@ -1,11 +1,12 @@
 import { Package } from 'lucide-react';
-import { useCatalog, useOrgProducts } from '../hooks/useApi';
+import { useCatalog, useClaimFreeProduct, useOrgProducts } from '../hooks/useApi';
 import { Button, Card, EmptyState, PageHeader, Skeleton } from '../components/ui';
 import { ProductCard, type OwnedProduct } from '../components/ProductCard';
 
 export function Products() {
   const owned = useOrgProducts();
   const catalog = useCatalog();
+  const claim = useClaimFreeProduct();
 
   const ownedSlugs = new Set((owned.data?.products ?? []).map((p) => p.slug));
   const discover = (catalog.data?.products ?? []).filter((p) => !ownedSlugs.has(p.slug));
@@ -54,11 +55,26 @@ export function Products() {
                   <h3 className="font-semibold">{p.name}</h3>
                 </div>
                 <p className="text-[13px] text-muted line-clamp-2 mb-4">{p.description}</p>
-                <a href={p.marketing_url ?? 'https://www.wpistic.com'} target="_blank" rel="noreferrer">
-                  <Button size="sm" variant="secondary" className="w-full">
-                    Learn more
+                {p.compliance_hold || p.acquisition_mode === 'compliance_hold' ? (
+                  <Button size="sm" variant="secondary" className="w-full" disabled>
+                    Coming soon
                   </Button>
-                </a>
+                ) : p.acquisition_mode === 'free_claim' ? (
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    disabled={claim.isPending}
+                    onClick={() => claim.mutate(p.slug)}
+                  >
+                    {claim.isPending ? 'Claiming…' : 'Claim free access'}
+                  </Button>
+                ) : (
+                  <a href={p.marketing_url ?? 'https://www.wpistic.com'} target="_blank" rel="noreferrer">
+                    <Button size="sm" variant="secondary" className="w-full">
+                      Learn more
+                    </Button>
+                  </a>
+                )}
               </Card>
             ))}
           </div>

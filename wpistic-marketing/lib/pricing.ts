@@ -39,8 +39,8 @@ export const pricingTiers: PricingTier[] = [
       "Remove WPistic branding",
       "Cross-product data (chat → CRM → analytics)",
     ],
-    cta: "Start 14-day trial",
-    href: "/register",
+    cta: "Coming soon",
+    href: "/contact",
   },
   {
     id: "professional",
@@ -54,8 +54,8 @@ export const pricingTiers: PricingTier[] = [
       "AI credit pool shared across products",
       "Client-ready white-label branding",
     ],
-    cta: "Start 14-day trial",
-    href: "/register",
+    cta: "Coming soon",
+    href: "/contact",
     highlighted: true,
     badge: "Most popular",
   },
@@ -71,8 +71,8 @@ export const pricingTiers: PricingTier[] = [
       "Larger AI credit pool with overage billing, not hard caps",
       "Quarterly account review with our team",
     ],
-    cta: "Start 14-day trial",
-    href: "/register",
+    cta: "Coming soon",
+    href: "/contact",
   },
   {
     id: "agency",
@@ -137,7 +137,7 @@ export const pricingFaqs = [
   },
   {
     q: "How does the AI credit pool work?",
-    a: "Chatbotistic, WPAgentistic, and Postistic draw from one shared AI credit pool sized to your plan, rather than separate limits per product. Business and Agency plans bill overage instead of hard-stopping usage.",
+    a: "Chatbotistic, SEOistic, and Postistic draw from one shared AI credit pool sized to your plan, rather than separate limits per product. Paid plan billing is coming soon.",
   },
   {
     q: "Is there a discount for paying annually?",

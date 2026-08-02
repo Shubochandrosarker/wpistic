@@ -136,13 +136,13 @@ export default async function ProductPage({
                       <span className="text-sm text-ink-500">/mo</span>
                     </div>
                     <p className="mt-2 text-[13px] text-ink-500">
-                      Or bundled free in the Professional plan and above.
+                      Paid plans are coming soon. Free product access is available without a card.
                     </p>
-                    <Button href="/pricing" variant="green" className="mt-6 w-full" icon="arrow">
-                      Start free trial
+                    <Button href="/register" variant="green" className="mt-6 w-full" icon="arrow">
+                      Join free launch
                     </Button>
                     <Button href="/contact" variant="outline" className="mt-3 w-full">
-                      Talk to sales
+                      Ask about paid plans
                     </Button>
                   </>
                 ) : (
@@ -151,8 +151,9 @@ export default async function ProductPage({
                       Coming soon
                     </div>
                     <p className="mt-3 text-[14.5px] leading-relaxed text-ink-600">
-                      {product.name} is in development. Join the waitlist to hear when it's ready
-                      for early access.
+                      {product.id === "ffl-checkout"
+                        ? "FFL Checkout remains compliance-held. Separate qualified legal and compliance approval is required before any claims, checkout, downloads, or activation."
+                        : `${product.name} is coming soon. Join the waitlist to hear when it's ready for early access.`}
                     </p>
                     <Button href="/contact" variant="green" className="mt-6 w-full">
                       Join the waitlist

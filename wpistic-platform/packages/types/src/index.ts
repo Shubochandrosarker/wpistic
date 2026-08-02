@@ -73,7 +73,7 @@ export type EntitlementMap = Record<string, EntitlementValue>;
 export interface EntitlementResolution {
   entitlements: EntitlementMap;
   /** Where each entitlement came from (subscription/license ids), newest wins. */
-  sources: Array<{ type: 'subscription' | 'license'; id: string; product: string; plan: string }>;
+  sources: Array<{ type: 'subscription' | 'license' | 'access_grant'; id: string; product: string; plan: string }>;
   /** Monotonic version — bump on every recalculation so caches can compare. */
   version: number;
   resolved_at: string;
@@ -352,6 +352,7 @@ export const impersonateSchema = z.object({
 export const adminLicenseActionSchema = z.object({
   action: z.enum(['suspend', 'reactivate', 'revoke', 'reset_activations']),
   reason: z.string().min(3).max(500),
+  mfa_code: z.string().min(6).max(10),
 });
 
 // ---------------------------------------------------------------------------
@@ -373,7 +374,8 @@ export type DomainEvent =
   | { type: 'website.connected'; data: { website_id: string; org_id: string; domain: string } }
   | { type: 'ai_credits.consumed'; data: { org_id: string; product: string; units: number; balance_after: number } }
   | { type: 'support.ticket.created'; data: { ticket_id: string; org_id: string; severity: string } }
-  | { type: 'product.update.published'; data: { product_id: string; version: string; channel: UpdateChannel } };
+  | { type: 'product.update.published'; data: { product_id: string; version: string; channel: UpdateChannel } }
+  | { type: 'product.claimed'; data: { grant_id: string; org_id: string; product_id: string; plan_id: string } };
 
 export type DomainEventType = DomainEvent['type'];
 
@@ -434,6 +436,11 @@ export interface ProductView {
   marketing_url: string | null;
   type: 'saas' | 'plugin' | 'bundle' | 'addon';
   status: string;
+  catalog_state?: 'draft' | 'coming_soon' | 'beta' | 'live' | 'retired';
+  acquisition_mode?: 'paid' | 'free_claim' | 'invite_only' | 'compliance_hold';
+  public_visibility?: boolean;
+  compliance_hold?: boolean;
+  free_limits?: Record<string, unknown>;
 }
 
 export interface PlanView {

@@ -23,7 +23,7 @@ function getPrivateKey(env: Env): Promise<CryptoKey> {
 }
 
 function getPublicKey(env: Env): Promise<CryptoKey> {
-  publicKeyPromise ??= importSPKI(normalizePem(env.JWT_PUBLIC_KEY), ALG);
+  publicKeyPromise ??= importSPKI(normalizePem(env.JWT_PUBLIC_KEY), ALG, { extractable: true });
   return publicKeyPromise;
 }
 

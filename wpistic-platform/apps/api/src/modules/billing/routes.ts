@@ -4,6 +4,8 @@ import { z } from 'zod';
 import type { Context } from 'hono';
 import { checkoutSchema, BILLING_ROLES } from '@wpistic/types';
 import type { AppContext } from '../../env';
+import { billingMode } from '../../env';
+import { ApiError } from '../../errors';
 import { requireOrg, requireRole, blockImpersonation } from '../../middleware/tenant';
 import { idempotency } from '../../middleware/idempotency';
 import { BillingService } from './service';
@@ -16,7 +18,7 @@ export function makeBillingService(c: Context<AppContext>): BillingService {
   const sql = c.get('sql');
   const events = c.get('events');
   return new BillingService(sql, events, {
-    stripe: new StripeClient(c.env.STRIPE_SECRET_KEY),
+    stripe: new StripeClient(c.env.STRIPE_SECRET_KEY ?? ''),
     licenses: makeLicenseService(c),
     credits: new CreditService(sql, events),
     entitlements: new EntitlementService(sql, c.env.SESSION_CACHE),
@@ -40,11 +42,15 @@ billingRoutes.get('/', async (c) => {
   return c.json({
     subscriptions,
     recent_invoices: invoices.slice(0, 3),
-    stripe_publishable_key: c.env.STRIPE_PUBLISHABLE_KEY,
+    billing_mode: billingMode(c.env),
+    stripe_publishable_key: billingMode(c.env) === 'FREE_ONLY' ? null : c.env.STRIPE_PUBLISHABLE_KEY ?? null,
   });
 });
 
 billingRoutes.post('/checkout', idempotency({ required: true }), zValidator('json', checkoutSchema), async (c) => {
+  if (billingMode(c.env) === 'FREE_ONLY') {
+    throw ApiError.conflict('billing_not_enabled', 'Paid checkout is not enabled while the platform is in FREE_ONLY mode');
+  }
   const { orgId } = requireRole(c, BILLING_ROLES);
   blockImpersonation(c);
   const result = await makeBillingService(c).createCheckout(orgId, c.req.valid('json'));
@@ -52,6 +58,9 @@ billingRoutes.post('/checkout', idempotency({ required: true }), zValidator('jso
 });
 
 billingRoutes.post('/portal', async (c) => {
+  if (billingMode(c.env) === 'FREE_ONLY') {
+    throw ApiError.conflict('billing_not_enabled', 'Paid billing is not enabled while the platform is in FREE_ONLY mode');
+  }
   const { orgId } = requireRole(c, BILLING_ROLES);
   blockImpersonation(c);
   const result = await makeBillingService(c).createPortal(orgId);
@@ -113,10 +122,13 @@ invoiceRoutes.get('/', async (c) => {
 export const stripeWebhookRoute = new Hono<AppContext>();
 
 stripeWebhookRoute.post('/', async (c) => {
+  if (billingMode(c.env) === 'FREE_ONLY') {
+    return c.json({ error: { code: 'billing_not_enabled', message: 'Stripe webhooks are disabled in FREE_ONLY mode' } }, 409);
+  }
   const payload = await c.req.text();
   const signature = c.req.header('Stripe-Signature') ?? null;
 
-  if (!(await verifyStripeSignature(payload, signature, c.env.STRIPE_WEBHOOK_SECRET))) {
+  if (!(await verifyStripeSignature(payload, signature, c.env.STRIPE_WEBHOOK_SECRET ?? ''))) {
     return c.json({ error: { code: 'invalid_signature', message: 'Stripe signature verification failed' } }, 400);
   }
 

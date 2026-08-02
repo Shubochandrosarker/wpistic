@@ -74,6 +74,12 @@ describe('canonicalJson', () => {
   it('preserves array order', () => {
     expect(canonicalJson([3, 1, 2])).toBe('[3,1,2]');
   });
+
+  it('serializes Date values as ISO-8601 strings', () => {
+    expect(canonicalJson({ expires_at: new Date('2027-01-01T00:00:00.000Z') })).toBe(
+      '{"expires_at":"2027-01-01T00:00:00.000Z"}'
+    );
+  });
 });
 
 describe('HMAC contract: deriveLicenseKey + signLicenseResponse', () => {
@@ -174,6 +180,14 @@ describe('RS256 activation tokens', () => {
     expect(verified?.license_id).toBe('license-1');
     expect(verified?.domain).toBe('example.com');
     expect(verified?.installation_uuid).toBe('install-1');
+  });
+
+  it('adds a unique jti when tokens are minted in the same second', async () => {
+    const first = await signActivationToken(privateKeyPem, claims(), 3600);
+    const second = await signActivationToken(privateKeyPem, claims(), 3600);
+    expect(first).not.toBe(second);
+    expect((await verifyActivationToken(publicKeyPem, first))?.jti).toBeTruthy();
+    expect((await verifyActivationToken(publicKeyPem, second))?.jti).toBeTruthy();
   });
 
   it('rejects a token signed by a different key', async () => {

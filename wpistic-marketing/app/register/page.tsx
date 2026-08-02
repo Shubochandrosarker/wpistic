@@ -11,7 +11,7 @@ import { testimonials } from "@/lib/testimonials";
 export const metadata: Metadata = {
   title: "Create your account",
   description:
-    "Create your WPistic account to start free with one product, or begin a 14-day trial on any bundled plan.",
+    "Create your WPistic account to claim free product access without a card. Paid plans are coming soon.",
 };
 
 const highlights = [
@@ -22,8 +22,8 @@ const highlights = [
   },
   {
     icon: "refresh",
-    title: "14-day trial on every paid plan",
-    body: "Upgrade to the full suite whenever you're ready, and cancel anytime.",
+    title: "Paid plans coming soon",
+    body: "Start with free product access now; paid checkout will open only after the billing account and webhooks are ready.",
   },
   {
     icon: "layers",
@@ -117,10 +117,10 @@ export default function RegisterPage() {
                 </span>
               </div>
               <Badge tone="green" className="mt-6">
-                14-day free trial
+                Card-free free access
               </Badge>
               <p className="mt-4 max-w-sm text-[15px] leading-relaxed text-white/70">
-                {site.tagline}. Start free with one product, or trial the whole suite.
+                {site.tagline}. Start free with one product; paid plans are coming soon.
               </p>
 
               <div className="mt-8 grid gap-5">

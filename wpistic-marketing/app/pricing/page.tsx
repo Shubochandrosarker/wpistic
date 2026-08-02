@@ -10,7 +10,7 @@ import { PricingToggle } from "./PricingToggle";
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "WPistic pricing: start free with one product, or bundle the full suite from $29/mo. Every plan includes a 14-day trial.",
+    "WPistic free launch: claim a product without a card. Paid plans and checkout are coming soon.",
 };
 
 export default function PricingPage() {
@@ -21,7 +21,7 @@ export default function PricingPage() {
           <SectionHeading
             eyebrow="Pricing"
             title="One price for the whole ecosystem"
-            description="Every plan bundles as many WPistic products as it lists, sharing one login, one AI credit pool, and one invoice. No per-product SaaS bill to reconcile."
+            description="Claim free product access with one login and one dashboard. Paid plans are displayed for planning only and checkout remains disabled during the free launch."
             align="center"
           />
         </Container>
