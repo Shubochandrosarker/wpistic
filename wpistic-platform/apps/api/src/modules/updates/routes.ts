@@ -5,7 +5,6 @@ import type { Context } from 'hono';
 import type { AppContext } from '../../env';
 import { DOWNLOAD_URL_TTL_SECONDS } from '../../env';
 import { ApiError } from '../../errors';
-import { sha256Hex, sha256HexBytes } from '../../utils/crypto';
 import { makeLicenseService } from '../licenses/routes';
 import { evaluateLicenseLifecycle } from '../licenses/service';
 import { UpdatesService, createDownloadGrant, resolveDownloadGrant } from './service';
@@ -83,11 +82,14 @@ export async function handleProductUpdates(c: Context<AppContext>) {
 }
 
 // ---------------------------------------------------------------------------
-// /api/v1/downloads — single-use, KV-granted, R2-streamed package downloads
+// /api/v1/downloads — single-use, database-granted, R2-streamed downloads
 // ---------------------------------------------------------------------------
 
+// The RS256 activation token is the sole credential: it already proves
+// possession of an active activation for a specific license/installation,
+// and the SDK deliberately never stores the raw license key after
+// activation — requiring it here would make unattended updates impossible.
 const downloadAuthorizeSchema = z.object({
-  license_key: z.string().min(1),
   activation_token: z.string().min(1),
   product_slug: z.string().min(1),
   requested_version: z.string().min(1),
@@ -100,9 +102,6 @@ downloadRoutes.post('/authorize', zValidator('json', downloadAuthorizeSchema), a
   const licenses = makeLicenseService(c);
   const { license, activation } = await licenses.resolveActivationToken(body.activation_token);
 
-  if ((await sha256Hex(body.license_key.trim())) !== license.key_hash) {
-    throw ApiError.unauthorized('License key does not match the activation token');
-  }
   if (license.product_slug !== body.product_slug) throw ApiError.forbidden('License does not cover this product');
 
   const lifecycle = evaluateLicenseLifecycle(license);
@@ -112,8 +111,15 @@ downloadRoutes.post('/authorize', zValidator('json', downloadAuthorizeSchema), a
 
   const pkg = await svc(c).findDownloadablePackage(license.product_id, body.requested_version, license.plan_id);
   const token = await createDownloadGrant(
-    c.env.SESSION_CACHE,
-    { license_id: license.id, product_id: license.product_id, version: body.requested_version, package_path: pkg.package_path, org_id: license.organization_id },
+    c.get('sql'),
+    {
+      license_id: license.id,
+      product_id: license.product_id,
+      version: body.requested_version,
+      package_path: pkg.package_path,
+      org_id: license.organization_id,
+      installation_uuid: activation.installation_uuid,
+    },
     DOWNLOAD_URL_TTL_SECONDS
   );
 
@@ -128,7 +134,7 @@ downloadRoutes.get('/file', async (c) => {
   const token = c.req.query('token');
   if (!token) throw ApiError.badRequest('missing_token', 'token query parameter is required');
 
-  const grant = await resolveDownloadGrant(c.env.SESSION_CACHE, token);
+  const grant = await resolveDownloadGrant(c.get('sql'), token);
   const object = await c.env.UPDATE_PACKAGES.get(grant.package_path);
   if (!object) throw ApiError.notFound('Package');
 
@@ -147,13 +153,24 @@ downloadRoutes.get('/file', async (c) => {
 // Admin package management — mounted under /api/v1/admin/packages
 // ---------------------------------------------------------------------------
 
+const MAX_PACKAGE_BYTES = 50 * 1024 * 1024;
+
+const uploadPackageQuerySchema = z.object({
+  product_slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/),
+  version: z
+    .string()
+    .min(1)
+    .max(50)
+    .regex(/^[0-9A-Za-z.+-]+$/),
+});
+
 const createPackageSchema = z.object({
   product_slug: z.string().min(1),
   channel: z.enum(['stable', 'beta', 'early_access', 'internal', 'security_hotfix']).default('stable'),
   version: z.string().min(1).max(50),
   release_notes: z.string().max(20000).optional(),
-  package_base64: z.string().min(1),
-  checksum: z.string().length(64).optional(),
+  package_path: z.string().min(1).max(500),
+  checksum: z.string().length(64).regex(/^[a-f0-9]{64}$/),
   min_php_version: z.string().max(20).optional(),
   min_wp_version: z.string().max(20).optional(),
   required_plan_id: z.string().uuid().optional(),
@@ -164,6 +181,53 @@ const createPackageSchema = z.object({
 
 export const packageRoutes = new Hono<AppContext>();
 
+// Step 1 of 2: stream the raw ZIP body straight into R2. The body is never
+// buffered in Worker memory (the old endpoint base64-decoded whole packages
+// on the heap); R2 itself verifies the payload against the declared SHA-256
+// and rejects the object on mismatch.
+packageRoutes.put('/upload', zValidator('query', uploadPackageQuerySchema), async (c) => {
+  const { product_slug, version } = c.req.valid('query');
+
+  const declaredChecksum = c.req.header('x-package-checksum')?.toLowerCase() ?? '';
+  if (!/^[a-f0-9]{64}$/.test(declaredChecksum)) {
+    throw ApiError.badRequest('missing_checksum', 'x-package-checksum header must be the SHA-256 hex of the package');
+  }
+
+  const contentLength = Number(c.req.header('content-length') ?? NaN);
+  if (!Number.isFinite(contentLength) || contentLength <= 0) {
+    throw ApiError.badRequest('missing_content_length', 'Content-Length is required for package uploads');
+  }
+  if (contentLength > MAX_PACKAGE_BYTES) {
+    throw ApiError.badRequest('package_too_large', `Packages are limited to ${MAX_PACKAGE_BYTES} bytes`);
+  }
+
+  const body = c.req.raw.body;
+  if (!body) throw ApiError.badRequest('missing_body', 'Request body must be the raw ZIP package');
+
+  const packagePath = `${product_slug}/${version}.zip`;
+  let object: R2Object;
+  try {
+    object = await c.env.UPDATE_PACKAGES.put(packagePath, body, {
+      sha256: declaredChecksum,
+      httpMetadata: { contentType: 'application/zip' },
+    });
+  } catch (err) {
+    throw ApiError.badRequest('checksum_mismatch', `Package rejected: ${String(err)}`);
+  }
+
+  return c.json(
+    {
+      package_path: packagePath,
+      size_bytes: object.size,
+      checksum: declaredChecksum,
+    },
+    201
+  );
+});
+
+// Step 2 of 2: register the uploaded object as an update package. Verifies
+// the object actually exists in R2 and that its stored SHA-256 matches the
+// declared checksum before creating the row.
 packageRoutes.post('/', zValidator('json', createPackageSchema), async (c) => {
   const body = c.req.valid('json');
   const sql = c.get('sql');
@@ -172,14 +236,18 @@ packageRoutes.post('/', zValidator('json', createPackageSchema), async (c) => {
   if (!products[0]) throw ApiError.notFound('Product');
   const productId = products[0].id;
 
-  const bytes = Uint8Array.from(atob(body.package_base64), (ch) => ch.charCodeAt(0));
-  const computedChecksum = await sha256HexBytes(bytes);
-  if (body.checksum && body.checksum !== computedChecksum) {
-    throw ApiError.badRequest('checksum_mismatch', 'Provided checksum does not match the uploaded package');
+  const object = await c.env.UPDATE_PACKAGES.head(body.package_path);
+  if (!object) throw ApiError.badRequest('package_not_uploaded', 'Upload the package to R2 first (PUT /admin/packages/upload)');
+  if (object.size > MAX_PACKAGE_BYTES) {
+    throw ApiError.badRequest('package_too_large', `Packages are limited to ${MAX_PACKAGE_BYTES} bytes`);
   }
 
-  const packagePath = `${body.product_slug}/${body.version}.zip`;
-  await c.env.UPDATE_PACKAGES.put(packagePath, bytes);
+  const storedSha256 = object.checksums.sha256
+    ? [...new Uint8Array(object.checksums.sha256)].map((b) => b.toString(16).padStart(2, '0')).join('')
+    : null;
+  if (storedSha256 && storedSha256 !== body.checksum) {
+    throw ApiError.badRequest('checksum_mismatch', 'Declared checksum does not match the uploaded package');
+  }
 
   const service = svc(c);
   const channelId = await service.ensureChannel({ productId, channelName: body.channel });
@@ -188,9 +256,9 @@ packageRoutes.post('/', zValidator('json', createPackageSchema), async (c) => {
     channelId,
     version: body.version,
     releaseNotes: body.release_notes,
-    packagePath,
-    packageSizeBytes: bytes.byteLength,
-    packageChecksum: computedChecksum,
+    packagePath: body.package_path,
+    packageSizeBytes: object.size,
+    packageChecksum: body.checksum,
     minPhpVersion: body.min_php_version,
     minWpVersion: body.min_wp_version,
     requiredPlanId: body.required_plan_id,

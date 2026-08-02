@@ -39,9 +39,9 @@
     "DASHBOARD_URL": "https://app.wpistic.com",
     "STRIPE_PUBLISHABLE_KEY": "pk_live_...",
     "ADMIN_EMAILS": ""
-  }
-  // Secrets (set via `wrangler secret put <NAME>`):
-  //   STRIPE_SECRET_KEY       — Stripe API key
+  },
+  // Secrets (set via `wrangler secret put <NAME>` — add `--env staging` for staging):
+  //   STRIPE_SECRET_KEY       — Stripe API key (test-mode key on staging)
   //   STRIPE_WEBHOOK_SECRET   — Stripe webhook signing secret
   //   LICENSE_SIGNING_SECRET  — HMAC master key for license response signatures
   //   LICENSE_JWT_PRIVATE_KEY — RS256 private key (PKCS8 PEM) for activation tokens
@@ -50,4 +50,54 @@
   //   JWT_PRIVATE_KEY         — re-signs access tokens on org switch
   //   ADMIN_API_TOKEN         — bearer token for admin.wpistic.com server-side calls
   //   MFA_ENC_KEY             — same AES key as the account service (admin MFA checks)
+  //
+  // Staging: deploy with `wrangler deploy --env staging` after replacing the
+  // STAGING_* placeholder IDs below with real resources:
+  //   wrangler hyperdrive create wpistic-staging --connection-string=<staging postgres url>
+  //   wrangler kv namespace create RATE_LIMIT --env staging
+  //   wrangler kv namespace create SESSION_CACHE --env staging
+  //   wrangler r2 bucket create wpistic-staging-updates
+  //   wrangler r2 bucket create wpistic-staging-assets
+  //   wrangler queues create wpistic-staging-events
+  //   wrangler queues create wpistic-staging-events-dlq
+  "env": {
+    "staging": {
+      "routes": [{ "pattern": "api-staging.wpistic.com", "custom_domain": true }],
+      "triggers": {
+        "crons": ["* * * * *"]
+      },
+      "hyperdrive": [
+        {
+          "binding": "HYPERDRIVE",
+          "id": "STAGING_HYPERDRIVE_ID",
+          "localConnectionString": "postgresql://wpistic:password@localhost:5432/wpistic"
+        }
+      ],
+      "kv_namespaces": [
+        { "binding": "RATE_LIMIT", "id": "STAGING_RATE_LIMIT_KV_ID" },
+        { "binding": "SESSION_CACHE", "id": "STAGING_SESSION_CACHE_KV_ID" }
+      ],
+      "queues": {
+        "producers": [{ "binding": "EVENT_BUS", "queue": "wpistic-staging-events" }],
+        "consumers": [
+          {
+            "queue": "wpistic-staging-events",
+            "max_batch_size": 25,
+            "max_retries": 5,
+            "dead_letter_queue": "wpistic-staging-events-dlq"
+          }
+        ]
+      },
+      "r2_buckets": [
+        { "binding": "UPDATE_PACKAGES", "bucket_name": "wpistic-staging-updates" },
+        { "binding": "ASSETS", "bucket_name": "wpistic-staging-assets" }
+      ],
+      "vars": {
+        "ACCOUNT_SERVICE_URL": "https://account-staging.wpistic.com",
+        "DASHBOARD_URL": "https://app-staging.wpistic.com",
+        "STRIPE_PUBLISHABLE_KEY": "pk_test_...",
+        "ADMIN_EMAILS": ""
+      }
+    }
+  }
 }

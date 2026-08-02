@@ -79,6 +79,32 @@ class HmacVerifierTest extends TestCase {
 		$this->assertTrue( HmacVerifier::verify( $response, self::VERIFICATION_KEY_HEX ) );
 	}
 
+	/**
+	 * Cross-language golden vector: this signature was produced by the
+	 * platform's TypeScript implementation (signLicenseResponse in
+	 * apps/api/src/utils/crypto.ts — see the matching test "matches the
+	 * cross-language golden vector verified by the PHP SDK" in
+	 * crypto.test.ts). Verifying it here proves the two implementations are
+	 * byte-identical, including null handling and unescaped slashes in URLs.
+	 */
+	public function test_verify_accepts_the_typescript_generated_vector(): void {
+		$response = array(
+			'valid'                => true,
+			'status'               => 'active',
+			'plan'                 => 'professional',
+			'product'              => 'insightistic',
+			'expires_at'           => '2027-01-01T00:00:00Z',
+			'grace_period_ends_at' => null,
+			'check_again_after'    => 43200,
+			'portal_url'           => 'https://app.wpistic.com/licenses',
+			'signature'            => 'a7e17a8766ed9ad2fcef29d183379ed11e393a224421d3470599383cc814b013',
+		);
+
+		$this->assertTrue(
+			HmacVerifier::verify( $response, '2af17247559acf975100e3e5ea4fbbd5e6a8336bd80ef3e4c7bee351ffa12adb' )
+		);
+	}
+
 	public function test_verify_rejects_wrong_signature(): void {
 		$response = self::PAYLOAD;
 		$response['signature'] = str_repeat( 'a', 64 );

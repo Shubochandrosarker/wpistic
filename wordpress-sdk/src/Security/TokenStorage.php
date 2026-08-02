@@ -40,9 +40,15 @@ class TokenStorage {
     }
 
     /**
-     * Retrieve and decrypt a value from wp_options
+     * Retrieve and decrypt a value from wp_options.
+     *
+     * Returns whatever type was stored (string, array, ...) — activation
+     * tokens and verification keys are strings, cached validation
+     * responses are arrays. Returns null when missing or undecryptable.
+     *
+     * @return mixed
      */
-    public static function retrieve(string $key): ?array {
+    public static function retrieve(string $key) {
         $raw = get_option("wpistic_enc_{$key}");
         if (!$raw) {
             return null;
@@ -70,8 +76,7 @@ class TokenStorage {
             return null;
         }
 
-        $decoded = json_decode($decrypted, true);
-        return is_array($decoded) ? $decoded : null;
+        return json_decode($decrypted, true);
     }
 
     /**

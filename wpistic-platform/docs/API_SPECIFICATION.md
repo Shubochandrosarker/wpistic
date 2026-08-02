@@ -33,9 +33,9 @@ issuance (`POST /organizations/:orgId/api-keys`); cannot act on any other org.
 ### License / Activation Credentials (plugin-facing, public routes)
 
 The WordPress SDK never sends a bearer token. Instead:
-- **License key** (`{product}_<32 hex>`) — only at `/licenses/activate`, and
-  once more alongside the activation token at `/downloads/authorize` as a
-  defense-in-depth double-check. Never stored raw; only its SHA-256 hash.
+- **License key** (`{product}_<32 hex>`) — only at `/licenses/activate`.
+  Never stored raw; only its SHA-256 hash. The SDK deliberately does not
+  keep the raw key after activation, so no other endpoint may require it.
 - **Activation token** — an RS256 JWT returned by activate/refresh. Sent back
   verbatim on validate/refresh/deactivate/connect/updates/downloads. The
   plugin never decodes or verifies it itself; the API does, every time.
@@ -264,39 +264,43 @@ same installation always lands in the same bucket for a given version.
 `download_url` is always `null` here — the caller must authorize a download
 separately.
 
-### `POST /downloads/authorize` — public, dual-credential authenticated
+### `POST /downloads/authorize` — public, activation-token authenticated
 
 ```jsonc
 {
-  "license_key": "seoistic_3f9a...",     // re-verified against the activation's own license
   "activation_token": "<JWT>",
   "product_slug": "seoistic",
   "requested_version": "2.2.0"
 }
 ```
-Checks: activation token resolves and matches `product_slug`; `license_key`'s
-hash matches that same license (defense in depth — both credentials must
-agree); license usable (grace counts); requested version is `published` for
-that product; if the package requires a specific plan, the license's plan
-must match it (`403` otherwise). Issues a `crypto.randomUUID()` opaque token,
-stored in KV as `download_auth:{token}` with a 15-minute TTL.
+The RS256 activation token is the sole credential — it already proves an
+active activation for a specific license and installation, and the SDK never
+stores the raw license key after activation (requiring it here would make
+unattended updates impossible). Checks: activation token resolves and matches
+`product_slug`; license usable (grace counts); requested version is
+`published` for that product; if the package requires a specific plan, the
+license's plan must match it (`403` otherwise). Issues an opaque `dl_<64 hex>`
+token; only its SHA-256 is stored, as a `download_grants` row with a
+15-minute expiry.
 
 ```jsonc
-{ "download_url": "/api/v1/downloads/file?token=<uuid>", "expires_in": 900 }
+{ "download_url": "/api/v1/downloads/file?token=dl_<hex>", "expires_in": 900 }
 ```
 
-### `GET /downloads/file?token=<uuid>` — public, single-use token
+### `GET /downloads/file?token=dl_<hex>` — public, single-use token
 
-Reads the KV grant and **deletes it immediately** (before streaming) — Workers
-KV has no atomic compare-and-swap, so read-then-delete is the tightest
-available race window against a concurrent replay; a token already consumed,
-or presented a second time, gets `403`. Streams the object straight from R2
-with `Content-Type: application/zip` and a `Content-Disposition: attachment`
-header naming the package file.
+Consumes the grant atomically in Postgres —
+`UPDATE download_grants SET used_at = NOW() WHERE token_hash = ... AND
+used_at IS NULL AND expires_at > NOW() RETURNING ...` — so exactly one
+request can ever win a given token; a concurrent replay, or a token already
+consumed or expired, matches zero rows and gets `403`. Streams the object
+straight from R2 with `Content-Type: application/zip` and a
+`Content-Disposition: attachment` header naming the package file.
 
 ### Admin package management — `/admin/packages` (admin auth required)
 
-- `POST /admin/packages` — `{ product_slug, channel, version, release_notes?, package_base64, checksum?, min_php_version?, min_wp_version?, required_plan_id?, rollout_percentage?, is_security_release?, is_forced? }`. Decodes the base64 payload, computes its SHA-256 over the raw bytes (never through a lossy string round-trip), verifies it against `checksum` if supplied, uploads to R2 at `{product_slug}/{version}.zip`, and creates a `draft` `update_packages` row. `201 { "package": {...} }`.
+- `PUT /admin/packages/upload?product_slug=<slug>&version=<v>` — raw ZIP bytes as the request body (never base64, never buffered in Worker memory), `Content-Length` required and capped at 50 MB, `x-package-checksum: <sha256 hex>` required. The body streams straight into R2 at `{product_slug}/{version}.zip`; R2 itself verifies the payload against the declared SHA-256 and the upload fails on mismatch. `201 { "package_path", "size_bytes", "checksum" }`.
+- `POST /admin/packages` — `{ product_slug, channel, version, release_notes?, package_path, checksum, min_php_version?, min_wp_version?, required_plan_id?, rollout_percentage?, is_security_release?, is_forced? }`. Verifies the object exists in R2 and that its stored SHA-256 matches `checksum`, then creates a `draft` `update_packages` row (size taken from the R2 object, not the caller). `201 { "package": {...} }`.
 - `POST /admin/packages/:id/publish` — flips to `published`, sets `published_at`, publishes a `product.update.published` event.
 - `POST /admin/packages/:id/rollback` — flips to `rolled_back`.
 

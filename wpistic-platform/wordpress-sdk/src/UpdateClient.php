@@ -13,18 +13,13 @@
  *     moment WordPress is actually about to fetch the package, not when
  *     the update is merely detected.
  *
- * NOTE — known contract tension (flagged, not silently worked around):
- * `/api/v1/downloads/authorize` requires the *raw* license key in its
- * body (`{license_key, activation_token, product_slug, requested_version}`),
- * but this SDK — correctly, per its own security requirements — never
- * stores the raw key after activation. Out of the box there is therefore
- * no raw key available to present at download time, and the authorize
- * call will fail. A `wpistic_{slug}_license_key_for_download` filter is
- * provided so an integrating plugin *may* supply it from its own storage
- * if it chooses to, but the SDK itself does not do so by default. This
- * needs a decision at the API-contract level (e.g. accepting the
- * activation token alone for this call) before automatic, unattended
- * updates can work end-to-end.
+ * Authorization: the RS256 activation token is the sole credential for
+ * `/api/v1/downloads/authorize` (`{activation_token, product_slug,
+ * requested_version}`). The SDK never stores the raw license key after
+ * activation, and the API deliberately does not ask for it here — the
+ * activation token already proves an active activation for this exact
+ * license and installation, which is what makes unattended background
+ * updates possible.
  *
  * @package WPistic\Sdk
  */
@@ -247,19 +242,18 @@ class UpdateClient {
 			return $reply;
 		}
 
-		$license_key = (string) apply_filters( 'wpistic_' . $this->client->product_slug() . '_license_key_for_download', '' );
-		if ( '' === $license_key ) {
+		$token = $this->client->activation_token();
+		if ( '' === $token ) {
 			return new WP_Error(
-				'wpistic_download_requires_key',
-				__( 'This update package requires re-entering your license key before it can be downloaded automatically. Enter it on the license settings page, then try updating again.', 'wpistic-sdk' )
+				'wpistic_download_requires_activation',
+				__( 'This site has no active license activation. Activate your license on the settings page, then try updating again.', 'wpistic-sdk' )
 			);
 		}
 
 		$authorized = $this->client->api()->post(
 			'/api/v1/downloads/authorize',
 			array(
-				'license_key'       => $license_key,
-				'activation_token'  => $this->client->activation_token(),
+				'activation_token'  => $token,
 				'product_slug'      => $this->client->product_slug(),
 				'requested_version' => (string) $meta['version'],
 			)
