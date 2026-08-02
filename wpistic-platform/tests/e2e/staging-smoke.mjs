@@ -60,6 +60,30 @@ async function req(url, init = {}) {
   return { status: res.status, headers: res.headers, text, json };
 }
 
+async function waitFor(url, ready, label, attempts = 60) {
+  let lastError = 'not ready';
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const res = await fetch(url, { redirect: 'manual' });
+      const location = res.headers.get('location');
+      res.body?.cancel();
+      if (ready(res.status, location)) return;
+      lastError = `HTTP ${res.status}${location ? ` ${location}` : ''}`;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error(`${label} did not become ready after ${attempts}s: ${lastError}`);
+}
+
+await Promise.all([
+  waitFor(`${API}/health`, (status) => status === 200, 'API'),
+  waitFor(`${ACCOUNT}/.well-known/openid-configuration`, (status) => status === 200, 'account'),
+  waitFor(`${DASHBOARD}/`, (status) => status === 200, 'dashboard'),
+  waitFor(`${ADMIN}/`, (status, location) => status === 302 && location?.startsWith('/login'), 'admin'),
+]);
+
 const admin = (path, init = {}) =>
   req(`${API}/api/v1/admin${path}`, {
     ...init,
