@@ -2,7 +2,9 @@
 
 Federated edge-native SaaS platform on Cloudflare Workers — the commercial and
 operational backbone of the WordPressistic ecosystem. Products (Chatbotistic,
-Insightistic, SEOistic, Memberistic, Bookingistic, Tripistic, WP Agentistic)
+Insightistic, SEOistic, Memberistic, Bookingistic, Formistic, Postistic,
+CRMistic, Licenseistic, WPistic AI Bridge, Messageistic, FFL Checkout,
+Scheduleistic, Mailistic, Verifyistic)
 stay independent applications; this platform owns identity, organizations,
 entitlements, licensing, billing, websites, AI credits, support, and audit.
 
@@ -52,7 +54,7 @@ DATABASE_URL=postgresql://wpistic:password@localhost:5432/wpistic npm run db:see
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out private.pem
 openssl rsa -in private.pem -pubout -out public.pem
 openssl rand -base64 32                  # MFA_ENC_KEY
-openssl rand -hex 32                     # LICENSE_SIGNING_SECRET / ADMIN_API_TOKEN
+openssl rand -hex 32                     # LICENSE_SIGNING_SECRET
 
 # 4. Run (separate terminals)
 npm run dev:account                      # :8788
@@ -76,9 +78,11 @@ once per environment:
 3. Queue `wpistic-events` (+ `wpistic-events-dlq`), R2 buckets
    `wpistic-updates` / `wpistic-assets`.
 4. Secrets via `wrangler secret put`: account — `JWT_PRIVATE_KEY`,
-   `JWT_PUBLIC_KEY`, `MFA_ENC_KEY`; api — those plus `STRIPE_SECRET_KEY`,
-   `STRIPE_WEBHOOK_SECRET`, `LICENSE_SIGNING_SECRET`, `ADMIN_API_TOKEN`;
-   admin — `ADMIN_API_TOKEN` (same value as api).
+   `JWT_PUBLIC_KEY`, `MFA_ENC_KEY`; api — those plus
+   `LICENSE_SIGNING_SECRET` and the license keypair. Production starts in
+   `BILLING_MODE=FREE_ONLY`; Stripe secrets are optional and may be injected
+   only after payment-owner approval and webhook readiness. Admin uses staff
+   OAuth JWTs and fresh MFA for mutations.
 5. Stripe webhook endpoint → `https://api.wpistic.com/api/v1/webhooks/stripe`.
 6. `npm run deploy:account && npm run deploy:api && npm run deploy:dashboard && npm run deploy:admin`.
 
@@ -91,8 +95,9 @@ separate databases, Stripe modes, OAuth clients, and secrets.
   response.
 - Rate limits: 100 req/min/IP, 1000 req/min/API key, 5 failed license
   activations/hour/IP; login failures 10/15min/IP.
-- Zod validation on every route; parameterized SQL only; RLS safety-net
-  policies on tenant tables (run the API under a non-owner role to arm them).
+- Zod validation on every route; parameterized SQL only; explicit organization
+  predicates on tenant tables. Transaction-scoped RLS and the non-owner
+  `wpistic_app` role remain a production release gate until proven live.
 - Only hashes stored for: passwords (bcrypt), license keys, API keys, session
   + refresh tokens, authorization codes, invitation and reset tokens,
   connection tokens. MFA secrets are AES-GCM encrypted.
@@ -135,8 +140,8 @@ Validation responses return the full entitlement set, `check_after: 43200`,
   license/activation status reconciled with the database, server-side grace
   period, canonical updates/downloads module (single-use KV grants, R2
   streaming), website `max_websites` enforcement, transactional outbox for
-  license/billing-webhook events, idempotent billing webhooks, RLS actually
-  wired per request (`wpistic_app` role), and a completed WordPress SDK
+  license/billing-webhook events, idempotent billing webhooks, pooled-connection
+  safety, and a completed WordPress SDK
   (encrypted-at-rest tokens, full PHPUnit suite). See
   `docs/API_SPECIFICATION.md` for the current contract.
 - Next: product-app SSO rollout (Insightistic first), marketplace checkout on

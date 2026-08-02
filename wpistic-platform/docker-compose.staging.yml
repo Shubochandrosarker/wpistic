@@ -1,0 +1,140 @@
+# Local staging stack: all four WPistic apps + Postgres, in Docker Desktop.
+#
+#   npm run staging:env      # once — writes .env.staging
+#   npm run staging:up       # build + start everything
+#   npm run staging:logs
+#
+# Or by hand — note that --env-file is required, because Compose only
+# interpolates ${...} from the file it is given, not from `env_file:`:
+#   docker compose --env-file .env.staging -f docker-compose.staging.yml up -d --build
+#
+# The Workers (api, account) run under `wrangler dev`, which means Miniflare
+# provides KV, R2, Queues, and the Hyperdrive binding locally — no Cloudflare
+# account, no real resources, nothing deployed. Hyperdrive is pointed at the
+# postgres service via WRANGLER_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE,
+# which overrides the localConnectionString baked into wrangler.jsonc.
+#
+# This is deliberately a separate file from docker-compose.yml (which is just
+# the bare dev database on :5432). Both can run at once — staging Postgres
+# binds :5433 and everything lives under the `wpistic-staging` project name.
+name: wpistic-staging
+
+x-app-image: &app-image
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+  image: wpistic-staging-app:latest
+  env_file: .env.staging
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: wpistic-staging-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_HOST_PORT}:5432"
+    volumes:
+      - staging_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # One-shot: applies database/migrations then database/seeds, then exits 0.
+  # Everything else waits on it completing successfully.
+  migrate:
+    <<: *app-image
+    container_name: wpistic-staging-migrate
+    restart: "no"
+    command: ["migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *app-image
+    container_name: wpistic-staging-api
+    command: ["api"]
+    environment:
+      WRANGLER_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: ${DATABASE_URL}
+    ports:
+      - "${API_PORT}:${API_PORT}"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:${API_PORT}/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  account:
+    <<: *app-image
+    container_name: wpistic-staging-account
+    command: ["account"]
+    environment:
+      WRANGLER_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: ${DATABASE_URL}
+    ports:
+      - "${ACCOUNT_PORT}:${ACCOUNT_PORT}"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:${ACCOUNT_PORT}/.well-known/openid-configuration || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  dashboard:
+    <<: *app-image
+    container_name: wpistic-staging-dashboard
+    command: ["dashboard"]
+    ports:
+      - "${DASHBOARD_PORT}:${DASHBOARD_PORT}"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:${DASHBOARD_PORT}/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  admin:
+    <<: *app-image
+    container_name: wpistic-staging-admin
+    command: ["admin"]
+    ports:
+      - "${ADMIN_PORT}:${ADMIN_PORT}"
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null -w '%{http_code}' http://localhost:${ADMIN_PORT}/ | grep -qE '^(200|302|303|500)$$'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  # Not started by `up` (profile: tools). Runs the vitest unit suite and the
+  # golden-path e2e script against the live stack:
+  #   docker compose --env-file .env.staging -f docker-compose.staging.yml \
+  #     run --rm tests
+  tests:
+    <<: *app-image
+    container_name: wpistic-staging-tests
+    profiles: ["tools"]
+    restart: "no"
+    command: ["test"]
+    environment:
+      API_URL: http://api:${API_PORT}
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  staging_pgdata:

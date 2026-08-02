@@ -73,10 +73,9 @@ describe('injectOrgContext', () => {
     await expect(injectOrgContext(c, vi.fn())).rejects.toThrow(/not a member/i);
   });
 
-  it('sets orgId/orgRole and issues set_config(app.current_org_id) on successful membership', async () => {
+  it('sets orgId/orgRole on successful membership', async () => {
     const mockSql: any = createMockSql();
     mockSql.mockResolvedValueOnce([{ role: 'admin' }]); // membership lookup
-    mockSql.mockResolvedValueOnce([]); // set_config call
     const c = makeContext({
       user: { id: 'u1', email: 'u1@example.com' },
       paramOrgId: ORG_A,
@@ -90,9 +89,6 @@ describe('injectOrgContext', () => {
     expect(c.get('orgRole')).toBe('admin');
     expect(next).toHaveBeenCalled();
 
-    const setConfigCall = mockSql.mock.calls.find((call: unknown[]) => (call[0] as string[]).join('').includes('set_config'));
-    expect(setConfigCall).toBeTruthy();
-    expect(setConfigCall).toContain(ORG_A);
   });
 
   it('API key bound to org A is forbidden from acting on org B', async () => {
@@ -107,9 +103,8 @@ describe('injectOrgContext', () => {
     await expect(injectOrgContext(c, vi.fn())).rejects.toThrow(/does not belong/i);
   });
 
-  it('API key matching its bound org sets RLS context and proceeds', async () => {
+  it('API key matching its bound org proceeds without roaming', async () => {
     const mockSql: any = createMockSql();
-    mockSql.mockResolvedValueOnce([]); // set_config call
     const c = makeContext({
       user: { id: 'u1', email: 'u1@example.com' },
       authKind: 'api_key',
@@ -122,7 +117,7 @@ describe('injectOrgContext', () => {
     await injectOrgContext(c, next);
     expect(c.get('orgId')).toBe(ORG_A);
     expect(next).toHaveBeenCalled();
-    expect(mockSql.mock.calls[0]).toContain(ORG_A);
+    expect(mockSql).not.toHaveBeenCalled();
   });
 
   it('admin routes skip customer-membership resolution entirely', async () => {
@@ -139,9 +134,8 @@ describe('injectOrgContext', () => {
     expect(c.get('orgId')).toBeUndefined();
   });
 
-  it('an impersonation token binds strictly to its own org and sets RLS context', async () => {
+  it('an impersonation token binds strictly to its own org', async () => {
     const mockSql: any = createMockSql();
-    mockSql.mockResolvedValueOnce([]); // set_config call
     const c = makeContext({
       user: { id: 'staff1', email: 'staff@wpistic.com' },
       impersonation: true,
@@ -155,7 +149,7 @@ describe('injectOrgContext', () => {
     expect(c.get('orgId')).toBe(ORG_A);
     expect(c.get('orgRole')).toBe('admin');
     expect(next).toHaveBeenCalled();
-    expect(mockSql.mock.calls[0]).toContain(ORG_A);
+    expect(mockSql).not.toHaveBeenCalled();
   });
 
   it('an impersonation token cannot be redirected to a different org', async () => {

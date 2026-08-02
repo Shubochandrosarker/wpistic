@@ -34,18 +34,6 @@ export function isPublicPath(path: string): boolean {
   return PUBLIC_PATTERNS.some((p) => p.test(path));
 }
 
-/**
- * `X-Admin-Role` is client-supplied (CORS-allowed) and not backed by any
- * staff-permissions table today — nothing branches on it yet, but trusting
- * an arbitrary string verbatim (defaulting to the most-privileged role) is a
- * latent escalation once something does. Constrain it to a known set and
- * default to the least-privileged role instead.
- */
-const KNOWN_ADMIN_ROLES = ['super_admin', 'support_agent', 'billing_admin'] as const;
-export function resolveAdminRole(headerValue: string | undefined): string {
-  return headerValue && (KNOWN_ADMIN_ROLES as readonly string[]).includes(headerValue) ? headerValue : 'support_agent';
-}
-
 export const jwtAuth: MiddlewareHandler<AppContext> = async (c, next) => {
   if (c.req.method === 'OPTIONS' || isPublicPath(c.req.path)) return next();
 
@@ -53,13 +41,12 @@ export const jwtAuth: MiddlewareHandler<AppContext> = async (c, next) => {
   if (!authHeader.startsWith('Bearer ')) throw ApiError.unauthorized();
   const token = authHeader.slice(7);
 
-  // Admin portal server-side token — only meaningful under /api/v1/admin/*.
-  if (c.env.ADMIN_API_TOKEN && token === c.env.ADMIN_API_TOKEN) {
-    if (!c.req.path.startsWith('/api/v1/admin')) {
-      throw ApiError.forbidden('Admin token is only valid on admin routes');
-    }
+  // Only local release automation may use the legacy token. The admin portal
+  // always uses an individually authenticated staff JWT.
+  if (c.env.ALLOW_LEGACY_ADMIN_TOKEN === 'true' && c.env.ADMIN_API_TOKEN && token === c.env.ADMIN_API_TOKEN) {
+    if (!c.req.path.startsWith('/api/v1/admin')) throw ApiError.forbidden('Admin token is only valid on admin routes');
     c.set('authKind', 'admin_token');
-    c.set('adminRole', resolveAdminRole(c.req.header('X-Admin-Role')));
+    c.set('adminRole', 'automation');
     return next();
   }
 

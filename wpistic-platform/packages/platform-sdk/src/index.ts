@@ -162,8 +162,19 @@ export class PlatformClient {
   }
   listOrgProducts(orgId: string) {
     return this.request<{
-      products: Array<ProductView & { plan: string | null; status: string; source: 'subscription' | 'license' | null }>;
+      products: Array<ProductView & { plan: string | null; status: string; source: 'subscription' | 'license' | 'access_grant' | null }>;
     }>(`/organizations/${orgId}/products`);
+  }
+  claimFreeProduct(orgId: string, slug: string, limit_overrides: Record<string, unknown> = {}) {
+    return this.request<{
+      claim: { id: string; product: string; limits: Record<string, unknown>; status: string; created_at: string };
+      repeated: boolean;
+      license: null;
+    }>(`/organizations/${orgId}/products/${encodeURIComponent(slug)}/claim`, {
+      method: 'POST',
+      headers: { 'X-Idempotency-Key': crypto.randomUUID() },
+      body: JSON.stringify({ limit_overrides }),
+    });
   }
   getEntitlements(orgId: string, product?: string) {
     const qs = product ? `?product=${encodeURIComponent(product)}` : '';

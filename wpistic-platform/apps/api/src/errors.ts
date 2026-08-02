@@ -6,7 +6,7 @@ import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import type { AppContext } from './env';
 
-type Status = 400 | 401 | 402 | 403 | 404 | 409 | 422 | 429 | 500;
+type Status = 400 | 401 | 402 | 403 | 404 | 409 | 422 | 429 | 500 | 503;
 
 export class ApiError extends Error {
   constructor(
@@ -37,6 +37,9 @@ export class ApiError extends Error {
   static paymentRequired(code: string, message: string) {
     return new ApiError(402, code, message);
   }
+  static unavailable(code: string, message: string) {
+    return new ApiError(503, code, message);
+  }
 }
 
 export function errorResponse(c: Context<AppContext>, err: unknown) {
@@ -54,12 +57,20 @@ export function errorResponse(c: Context<AppContext>, err: unknown) {
       err.status
     );
   }
+  const message = err instanceof Error ? err.message : String(err);
+  if (/too many clients|remaining connection slots|connection.*exhaust/i.test(message)) {
+    c.header('Retry-After', '5');
+    return c.json(
+      { error: { code: 'database_unavailable', message: 'Database is temporarily busy; retry shortly', correlation_id: correlationId } },
+      503
+    );
+  }
   console.error(
     JSON.stringify({
       level: 'error',
       correlation_id: correlationId,
       path: c.req.path,
-      message: err instanceof Error ? err.message : String(err),
+      message,
       stack: err instanceof Error ? err.stack : undefined,
     })
   );

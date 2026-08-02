@@ -33,9 +33,13 @@ export const injectOrgContext: MiddlewareHandler<AppContext> = async (c, next) =
   // this org", so the customer-membership check below doesn't apply to them.
   if (c.req.path.startsWith('/api/v1/admin')) return next();
 
+  // Global middleware does not receive Hono's route params reliably. Parse the
+  // mounted URL explicitly so `/organizations/:orgId/*` is authoritative;
+  // retain the route-param fallback for directly invoked middleware/tests.
+  const pathOrgId = /^\/api\/v1\/organizations\/([0-9a-f-]{36})(?:\/|$)/i.exec(c.req.path)?.[1];
   const paramOrgId = c.req.param('orgId');
   const headerOrgId = c.req.header('X-Organization-Id');
-  const requested = paramOrgId ?? headerOrgId ?? c.get('tokenOrgId') ?? null;
+  const requested = pathOrgId ?? paramOrgId ?? headerOrgId ?? c.get('tokenOrgId') ?? null;
   if (!requested) return next();
 
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requested)) {
@@ -51,7 +55,6 @@ export const injectOrgContext: MiddlewareHandler<AppContext> = async (c, next) =
     }
     c.set('orgId', requested);
     c.set('orgRole', 'member');
-    await setOrgRlsContext(c, requested);
     return next();
   }
 
@@ -65,7 +68,6 @@ export const injectOrgContext: MiddlewareHandler<AppContext> = async (c, next) =
     }
     c.set('orgId', requested);
     c.set('orgRole', c.get('orgRole') ?? 'admin');
-    await setOrgRlsContext(c, requested);
     return next();
   }
 
@@ -74,23 +76,8 @@ export const injectOrgContext: MiddlewareHandler<AppContext> = async (c, next) =
 
   c.set('orgId', requested);
   c.set('orgRole', role);
-  await setOrgRlsContext(c, requested);
   await next();
 };
-
-/**
- * Row Level Security safety net (migration 0010, 0012): every authenticated
- * request with a resolved org sets app.current_org_id on its (single,
- * request-scoped — see createDb) connection before any route handler runs.
- * This is defense-in-depth on top of the explicit organization_id filters
- * every query already carries — it only bites if a query ever omits one,
- * and only for a DB role that isn't the table owner/superuser (see
- * migration 0010's note on running the API as a dedicated `wpistic_app`
- * role in production).
- */
-async function setOrgRlsContext(c: Context<AppContext>, organizationId: string): Promise<void> {
-  await c.get('sql')`SELECT set_config('app.current_org_id', ${organizationId}, false)`;
-}
 
 /** Guard for org-scoped routes: require a resolved org. */
 export function requireOrg(c: Context<AppContext>): { orgId: string; role: OrgRole } {

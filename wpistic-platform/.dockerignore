@@ -1,0 +1,26 @@
+# Everything the image installs or generates itself.
+node_modules
+**/node_modules
+dist
+**/dist
+build
+**/build
+.astro
+**/.astro
+.wrangler
+**/.wrangler
+coverage
+**/coverage
+
+# Secrets are injected at runtime via env_file / entrypoint, never baked in.
+.env
+.env.*
+.dev.vars
+**/.dev.vars
+**/.dev.vars.*
+
+.git
+.github
+docs
+*.log
+*.md

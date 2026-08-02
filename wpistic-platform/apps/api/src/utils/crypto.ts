@@ -53,6 +53,7 @@ export function timingSafeEqual(a: string, b: string): boolean {
 
 /** Canonical JSON: recursively sorted object keys, no whitespace. */
 export function canonicalJson(value: unknown): string {
+  if (value instanceof Date) return JSON.stringify(value.toISOString());
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
   const entries = Object.entries(value as Record<string, unknown>)
@@ -126,6 +127,7 @@ export async function signActivationToken(
   const key = await getPrivateKey(privateKeyPem);
   return new SignJWT({ ...claims })
     .setProtectedHeader({ alg: 'RS256' })
+    .setJti(randomHex(16))
     .setSubject(claims.sub)
     .setIssuedAt()
     .setExpirationTime(Math.floor(Date.now() / 1000) + ttlSeconds)

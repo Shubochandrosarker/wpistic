@@ -61,7 +61,7 @@ export const auditMiddleware: MiddlewareHandler<AppContext> = async (c, next) =>
   const user = c.get('user');
   const { action, resourceType, resourceId } = deriveAction(c.req.method, c.req.path);
   const sql = c.get('sql');
-  const actorType = c.get('impersonation') ? 'admin' : c.get('authKind') === 'admin_token' ? 'admin' : 'user';
+  const actorType = c.get('impersonation') || c.get('adminRole') ? 'admin' : 'user';
 
   c.executionCtx.waitUntil(
     sql`

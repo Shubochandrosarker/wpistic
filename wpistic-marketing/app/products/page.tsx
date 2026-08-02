@@ -16,7 +16,7 @@ export default function ProductsPage() {
       <Container>
         <SectionHeading
           eyebrow="Product suite"
-          title="Eleven products, built to run together"
+          title="Fifteen products, built to run together"
           description="Every product below installs like a normal WordPress plugin and reports into the same WPistic dashboard — licenses, billing, and usage in one place."
         />
         <div className="mt-12">

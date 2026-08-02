@@ -328,6 +328,7 @@ export class LicenseService {
           product_version = COALESCE(${input.plugin_version ?? null}, product_version)
       WHERE id = ${activation.id}`;
 
+    await this.ensureLifecycleFresh(license);
     return this.buildValidationResponse(license, activation);
   }
 
@@ -570,6 +571,11 @@ export class LicenseService {
     }
 
     return evaluateLicenseLifecycle(license, now);
+  }
+
+  /** Public wrapper for update/download routes that share lifecycle rules. */
+  async ensureLifecycleFreshForRequest(license: LicenseRow): Promise<LicenseLifecycle> {
+    return this.ensureLifecycleFresh(license);
   }
 
   /**

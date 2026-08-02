@@ -35,6 +35,11 @@ export const useSessions = () =>
 export const useApiKeys = () => orgQuery('api-keys', (o) => api.listApiKeys(o));
 export const useCatalog = () =>
   useQuery({ queryKey: ['products'], queryFn: () => api.listProducts(), staleTime: 300_000 });
+export const useClaimFreeProduct = () =>
+  useOrgMutation<string, Awaited<ReturnType<typeof api.claimFreeProduct>>>(
+    ['org-products', 'products'],
+    (orgId, slug) => api.claimFreeProduct(orgId, slug)
+  );
 
 /** Mutation helper that invalidates the given query keys on success. */
 export function useOrgMutation<TInput, TResult>(

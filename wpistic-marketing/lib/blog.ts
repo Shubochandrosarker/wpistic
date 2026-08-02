@@ -15,8 +15,8 @@ export interface BlogPost {
 
 export const posts: BlogPost[] = [
   {
-    slug: "one-dashboard-for-eleven-products",
-    title: "Why we built one dashboard for 11 WordPress products instead of 11 separate ones",
+    slug: "one-dashboard-for-fifteen-products",
+    title: "Why we built one dashboard for 15 WordPress products instead of 15 separate ones",
     excerpt:
       "Every WPistic product could have shipped as its own SaaS with its own login and its own bill. Here's why we deliberately didn't do that, and what it cost us to avoid it.",
     date: "2026-05-12",
@@ -24,10 +24,10 @@ export const posts: BlogPost[] = [
     category: "Product",
     content: [
       "When we started building Chatbotistic, the obvious path was the one every WordPress plugin business takes: stand up a separate site, a separate Stripe account, a separate login, and treat it as its own product. That's how most of the WordPress SaaS landscape works today — a chat widget from one vendor, a CRM from another, a booking plugin from a third, each with its own settings screen and its own outage.",
-      "We didn't want to ship our eleventh product that way. The whole reason WPistic exists is that we were the agency stitching these tools together for clients, and the stitching was the expensive part — not the individual plugins. So before Memberistic or CRMistic had a single feature spec written, we had to decide how entitlements, billing, and identity would work across products that didn't exist yet.",
+      "We didn't want to ship our fifteenth product that way. The whole reason WPistic exists is that we were the agency stitching these tools together for clients, and the stitching was the expensive part — not the individual plugins. So before Memberistic or CRMistic had a single feature spec written, we had to decide how entitlements, billing, and identity would work across products that didn't exist yet.",
       "The answer was a shared core: one account model, one billing ledger, one entitlements table that every product — Chatbotistic, CRMistic, Bookingistic, all the way down to Licenseistic — reads from at plugin activation. A customer on the Professional plan doesn't have 'a Chatbotistic subscription and a separate CRMistic subscription that happen to renew on the same day.' They have one subscription that grants access to a set of products, full stop.",
       "The cost of this was real. Every new product takes longer to ship because it has to onboard to the shared entitlements and billing system instead of just bolting on its own Stripe webhook. Early on, that felt like the wrong tradeoff — competitors with single-purpose plugins were shipping faster. But it's the same investment that now lets a Chatbotistic conversation become a CRMistic contact automatically, or a Memberistic plan change instantly grant a Licenseistic activation, with no Zapier account and no polling job in between.",
-      "The test we keep coming back to: would a customer running three WPistic products describe their stack as 'three tools' or 'one system'? If it's the former, we haven't finished the job. That's still true today — not every integration between every pair of products is as deep as we want, and we say so on the marketplace page rather than pretending otherwise. But the direction is set, and it's the reason the dashboard says 'WPistic' once instead of showing eleven separate app icons.",
+      "The test we keep coming back to: would a customer running three WPistic products describe their stack as 'three tools' or 'one system'? If it's the former, we haven't finished the job. That's still true today — not every integration between every pair of products is as deep as we want, and we say so on the marketplace page rather than pretending otherwise. But the direction is set, and it's the reason the dashboard says 'WPistic' once instead of showing fifteen separate app icons.",
     ],
   },
   {

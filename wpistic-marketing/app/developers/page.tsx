@@ -69,7 +69,7 @@ export default function DevelopersPage() {
           <SectionHeading
             eyebrow="What's available"
             title="Built for agencies and product teams automating the boring parts"
-            description="Every product in the suite phones into the same workspace model, so one integration covers licenses, activations, and usage across all eleven."
+            description="Every product in the suite phones into the same workspace model, so one integration covers licenses, activations, and usage across all fifteen."
           />
           <div className="mt-12 grid gap-6 sm:grid-cols-2">
             {features.map((f) => (

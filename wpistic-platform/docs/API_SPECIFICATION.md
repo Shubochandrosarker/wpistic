@@ -49,11 +49,11 @@ never trusted on its own.
 
 ### Admin
 
-`X-Admin-API-Token: <ADMIN_API_TOKEN>` (service-to-service from
-admin.wpistic.com), or a staff JWT whose `email` is in the `ADMIN_EMAILS`
-allowlist. Impersonation (`POST /admin/impersonate`) additionally requires a
-fresh MFA code and mints a 30-minute token that blocks billing/destructive
-actions at the route level.
+Admin requests use a staff JWT whose `email` is in the `ADMIN_EMAILS` allowlist
+and whose token contains the `admin` scope. Impersonation and other high-risk
+mutations additionally require fresh MFA. A legacy `ADMIN_API_TOKEN` exists
+only when `ALLOW_LEGACY_ADMIN_TOKEN=true` for local release automation and is
+never a production admin login mechanism.
 
 ---
 
@@ -413,7 +413,7 @@ here so every live endpoint is at least indexed.
 | `POST /invitations/accept` | invite token | accept an invitation |
 | `GET /organizations/:orgId/api-keys` / `POST .../api-keys` / `DELETE .../api-keys/:id` | JWT + membership | API key management |
 | `GET /products` / `GET /products/:slug` | JWT | catalog browsing |
-| `GET /organizations/:orgId/products` | JWT + membership | owned products |
+| `GET /organizations/:orgId/products` / `POST .../:slug/claim` | JWT + membership | owned products and card-free free claims |
 | `GET /organizations/:orgId/ai-credits/balance` / `.../ledger` | JWT + membership | AI credit balance/ledger |
 | `POST /usage/events` | JWT, API key, or `activation_token` in body | metered AI usage |
 | `GET /organizations/:orgId/support` / `POST .../support` / `GET .../support/:id` / `POST .../support/:id/messages` | JWT + membership | support tickets |
@@ -456,14 +456,12 @@ Signature header: `X-WPistic-Signature: t=<unix>,v1=<hex hmac_sha256(secret, "${
 
 ## Row Level Security
 
-Every authenticated request with a resolved organization sets
-`app.current_org_id` (`SELECT set_config(...)`) on its connection before any
-route handler runs (`middleware/tenant.ts`). This is defense-in-depth — every
-query still carries its own explicit `organization_id` filter — but it only
-has teeth when the API connects as a non-owner role: `wpistic_app` (created
-in migration 012), which RLS actually restricts, unlike the schema-owning
-role migrations run as. Production's Hyperdrive connection string should
-point at `wpistic_app`, not the owning role.
+Tenant middleware resolves the mounted URL organization id and re-checks
+membership before customer routes run. Tenant queries carry explicit
+`organization_id` predicates. Session-scoped `set_config` is intentionally not
+used with pooled Hyperdrive connections; transaction-scoped RLS is available
+through `withOrg()`. Production must use the separately provisioned
+`wpistic_app` role and pass a real-database RLS test before launch.
 
 ---
 
@@ -537,5 +535,6 @@ for a retried request with the same key, scoped per org/IP + path.
   failed event; no duplicate license issuance on webhook replay; unknown
   Stripe statuses never default to `active`; failed payments apply a grace
   period to licenses; added reactivate/upgrade.
-- RLS `app.current_org_id` actually set per request; `wpistic_app` restricted
-  role added for production to connect as.
+- Transaction-scoped RLS via `app.current_org_id` is available through
+  `withOrg()`; tenant middleware uses explicit organization predicates and the
+  `wpistic_app` restricted role is provisioned for production.

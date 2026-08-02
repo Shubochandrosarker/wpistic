@@ -22,17 +22,19 @@ const nextNotes: Record<string, string> = {
   bookingistic:
     "Group bookings and multi-resource scheduling for businesses that book more than one resource per appointment.",
   insightistic: "More granular per-product usage breakdowns and configurable digest schedules.",
-  wpagentistic:
-    "More agents shipping monthly, plus the ability to chain agents together for multi-step workflows.",
+  seoistic: "More granular content recommendations and technical audit workflows.",
   postistic: "Direct scheduling integrations with more social platforms and longer-form content briefs.",
   crmistic: "Deeper pipeline automation rules and more segment-based messaging options.",
   licenseistic:
     "Expanding the public REST API surface based on early feedback from customers migrating off custom license servers.",
-  fflistic: "Broader state-by-state compliance checklist coverage as beta feedback comes in.",
-  travelistic:
-    "In development — early access planned once the itinerary builder and departure calendar are ready for real bookings.",
+  formistic: "More workflow routing options and deeper submission automation.",
   verifyistic:
     "In development — early access planned once document review workflows are ready for regulated use cases.",
+  messageistic: "More delivery controls and product-wide notification preferences.",
+  scheduleistic: "More recurring workflow triggers and operational run history.",
+  mailistic: "More consent-aware campaign and lifecycle automation tools.",
+  "wpistic-ai-bridge": "More approved providers and policy-aware AI routing.",
+  "ffl-checkout": "Compliance hold: separate qualified legal and compliance approval is required before any launch activity.",
 };
 
 const live = products.filter((p) => p.status === "Live");

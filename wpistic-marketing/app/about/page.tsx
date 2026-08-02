@@ -91,7 +91,7 @@ export default function AboutPage() {
               <Stat value={String(products.length)} label="Products in the suite" />
               <Stat value="1" label="Dashboard login" />
               <Stat value="13mo" label="Analytics retention, no sampling" />
-              <Stat value="14-day" label="Free trial, every plan" />
+              <Stat value="Free" label="Card-free launch access" />
             </div>
           </div>
         </Container>

@@ -1,0 +1,10 @@
+Options -MultiViews
+DirectoryIndex index.html
+
+# Hostinger Business serves the Next static export directly from this directory.
+# Keep unknown paths as 404s; the export contains each generated route as index.html.
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+RewriteRule ^ - [R=404,L]

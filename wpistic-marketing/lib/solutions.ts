@@ -67,7 +67,7 @@ export const solutions: Solution[] = [
       "Content production and analytics live in separate tools with no shared view",
       "Reporting to clients means manually assembling numbers from several dashboards",
     ],
-    recommendedProducts: ["postistic", "insightistic", "wpagentistic"],
+    recommendedProducts: ["postistic", "insightistic", "seoistic"],
   },
   {
     id: "enterprise",

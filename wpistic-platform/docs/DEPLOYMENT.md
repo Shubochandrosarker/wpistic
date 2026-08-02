@@ -82,8 +82,8 @@ LICENSE_JWT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n..."   # RS256, PKCS8 PEM 
 LICENSE_JWT_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n..."     # RS256, SPKI PEM
 ADMIN_API_TOKEN="$(openssl rand -hex 32)"
 ADMIN_EMAILS="admin@company.com,support@company.com"
-STRIPE_SECRET_KEY="sk_test_..."
-STRIPE_WEBHOOK_SECRET="whsec_..."
+# Stripe secrets are injected only by an authorized payment administrator
+# after the matching environment has passed its separate billing gate.
 JWT_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n..."
 SESSION_CACHE_TTL_SECONDS=86400
 LICENSE_CHECK_AFTER_SECONDS=43200
@@ -109,10 +109,7 @@ cd apps/api
 wrangler secret put LICENSE_SIGNING_SECRET --env production
 wrangler secret put LICENSE_JWT_PRIVATE_KEY --env production < license_private_key_pkcs8.pem
 wrangler secret put LICENSE_JWT_PUBLIC_KEY --env production < license_public_key.pem
-wrangler secret put ADMIN_API_TOKEN --env production
 wrangler secret put ADMIN_EMAILS --env production
-wrangler secret put STRIPE_SECRET_KEY --env production
-wrangler secret put STRIPE_WEBHOOK_SECRET --env production
 wrangler secret put JWT_PUBLIC_KEY --env production
 ```
 
@@ -175,12 +172,10 @@ entirely.
 wrangler hyperdrive create wpistic-db --connection-string postgresql://wpistic_app:<password>@host:5432/wpistic
 ```
 
-Update `wrangler.jsonc` with the Hyperdrive ID. Also set a real password for
-`wpistic_app` in production — migration `012` creates the role with a
-placeholder password:
-```sql
-ALTER ROLE wpistic_app PASSWORD '<a real generated secret>';
-```
+Update `wrangler.jsonc` with the Hyperdrive ID. Provision the login password
+outside source control with `database/scripts/provision-roles.ps1`, using
+`DATABASE_ADMIN_URL` and `WPISTIC_APP_PASSWORD` from the deployment secret
+manager.
 
 #### Cron Trigger (outbox publisher)
 

@@ -10,9 +10,39 @@
   },
   "vars": {
     "API_URL": "https://api.wpistic.com",
-    "DASHBOARD_URL": "https://app.wpistic.com"
+    "DASHBOARD_URL": "https://app.wpistic.com",
+    "ACCOUNT_URL": "https://account.wpistic.com",
+    "PUBLIC_ACCOUNT_URL": "https://account.wpistic.com",
+    "ADMIN_CLIENT_ID": "wpistic_admin",
+    "ADMIN_REDIRECT_URI": "https://admin.wpistic.com/auth/callback"
+  },
+  "env": {
+    "staging": {
+      "name": "wpistic-admin-staging",
+      "routes": [{ "pattern": "admin-staging.wpistic.com", "custom_domain": true }],
+      "vars": {
+        "API_URL": "https://api-staging.wpistic.com",
+        "DASHBOARD_URL": "https://app-staging.wpistic.com",
+        "ACCOUNT_URL": "https://account-staging.wpistic.com",
+        "PUBLIC_ACCOUNT_URL": "https://account-staging.wpistic.com",
+        "ADMIN_CLIENT_ID": "wpistic_admin",
+        "ADMIN_REDIRECT_URI": "https://admin-staging.wpistic.com/auth/callback"
+      }
+    },
+    "production": {
+      "name": "wpistic-admin",
+      "routes": [{ "pattern": "admin.wpistic.com", "custom_domain": true }],
+      "vars": {
+        "API_URL": "https://api.wpistic.com",
+        "DASHBOARD_URL": "https://app.wpistic.com",
+        "ACCOUNT_URL": "https://account.wpistic.com",
+        "PUBLIC_ACCOUNT_URL": "https://account.wpistic.com",
+        "ADMIN_CLIENT_ID": "wpistic_admin",
+        "ADMIN_REDIRECT_URI": "https://admin.wpistic.com/auth/callback"
+      }
+    }
   }
   // Secrets (set via `wrangler secret put <NAME>`):
-  //   ADMIN_API_TOKEN — must match the api worker's ADMIN_API_TOKEN secret.
-  //   Optionally protect the whole hostname with Cloudflare Access.
+  // The admin worker uses OAuth staff JWTs issued by the account service.
+  // Protect the hostname with Cloudflare Access as an additional perimeter control.
 }

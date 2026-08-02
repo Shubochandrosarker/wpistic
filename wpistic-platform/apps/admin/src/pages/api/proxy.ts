@@ -1,6 +1,6 @@
 /**
  * Same-origin mutation proxy for interactive islands (license actions,
- * webhook replays). Keeps ADMIN_API_TOKEN server-side. Only allowlisted
+ * webhook replays). Keeps the staff access token server-side. Only allowlisted
  * admin endpoints can be reached.
  */
 import type { APIRoute } from 'astro';
@@ -14,6 +14,11 @@ const ALLOWED = [
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = locals.runtime.env;
+  const session = locals.admin;
+  const origin = request.headers.get('Origin');
+  if (!session || !origin || origin !== new URL(request.url).origin) {
+    return new Response(JSON.stringify({ error: { message: 'Authenticated same-origin request required' } }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+  }
   const { endpoint, body } = (await request.json().catch(() => ({}))) as {
     endpoint?: string;
     body?: unknown;
@@ -29,8 +34,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const upstream = await fetch(`${env.API_URL}/api/v1/admin${endpoint}`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${env.ADMIN_API_TOKEN}`,
-      'X-Admin-Role': 'super_admin',
+      Authorization: `Bearer ${session.accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body ?? {}),

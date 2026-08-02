@@ -37,7 +37,12 @@
   "vars": {
     "ACCOUNT_SERVICE_URL": "https://account.wpistic.com",
     "DASHBOARD_URL": "https://app.wpistic.com",
-    "STRIPE_PUBLISHABLE_KEY": "pk_live_...",
+    "PUBLIC_API_URL": "https://api.wpistic.com",
+    "PUBLIC_ACCOUNT_URL": "https://account.wpistic.com",
+    "PUBLIC_DASHBOARD_URL": "https://app.wpistic.com",
+    "PUBLIC_ADMIN_URL": "https://admin.wpistic.com",
+    "BILLING_MODE": "FREE_ONLY",
+    "STRIPE_PUBLISHABLE_KEY": "",
     "ADMIN_EMAILS": ""
   },
   // Secrets (set via `wrangler secret put <NAME>` — add `--env staging` for staging):
@@ -48,7 +53,7 @@
   //   LICENSE_JWT_PUBLIC_KEY  — RS256 public key (SPKI PEM) for activation tokens
   //   JWT_PUBLIC_KEY          — verifies access tokens from account.wpistic.com
   //   JWT_PRIVATE_KEY         — re-signs access tokens on org switch
-  //   ADMIN_API_TOKEN         — bearer token for admin.wpistic.com server-side calls
+  //   ADMIN_API_TOKEN         — local release automation only; never configure in production
   //   MFA_ENC_KEY             — same AES key as the account service (admin MFA checks)
   //
   // Staging: deploy with `wrangler deploy --env staging` after replacing the
@@ -95,7 +100,12 @@
       "vars": {
         "ACCOUNT_SERVICE_URL": "https://account-staging.wpistic.com",
         "DASHBOARD_URL": "https://app-staging.wpistic.com",
-        "STRIPE_PUBLISHABLE_KEY": "pk_test_...",
+        "PUBLIC_API_URL": "https://api-staging.wpistic.com",
+        "PUBLIC_ACCOUNT_URL": "https://account-staging.wpistic.com",
+        "PUBLIC_DASHBOARD_URL": "https://app-staging.wpistic.com",
+        "PUBLIC_ADMIN_URL": "https://admin-staging.wpistic.com",
+        "BILLING_MODE": "FREE_ONLY",
+        "STRIPE_PUBLISHABLE_KEY": "",
         "ADMIN_EMAILS": ""
       }
     }

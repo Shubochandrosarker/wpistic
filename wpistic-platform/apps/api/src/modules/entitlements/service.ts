@@ -14,7 +14,7 @@ import { ENTITLED_SUBSCRIPTION_STATUSES } from '@wpistic/types';
 interface EntitlementRow {
   key: string;
   value: EntitlementValue;
-  source_type: 'subscription' | 'license';
+  source_type: 'subscription' | 'license' | 'access_grant';
   source_id: string;
   product_slug: string;
   plan_slug: string;
@@ -73,6 +73,25 @@ export class EntitlementService {
       JOIN features f ON f.id = pe.feature_id
       WHERE s.organization_id = ${orgId}
         AND s.status IN ${this.sql(ENTITLED_SUBSCRIPTION_STATUSES as unknown as string[])}
+
+      UNION ALL
+
+      SELECT f.key,
+             pe.value,
+             'access_grant' AS source_type,
+             g.id AS source_id,
+             p.slug AS product_slug,
+             pl.slug AS plan_slug,
+             g.created_at AS source_created_at
+      FROM product_access_grants g
+      JOIN plans pl ON pl.id = g.plan_id
+      JOIN products p ON p.id = g.product_id
+      JOIN plan_entitlements pe ON pe.plan_id = pl.id
+      JOIN features f ON f.id = pe.feature_id
+      WHERE g.organization_id = ${orgId}
+        AND g.status = 'active'
+        AND g.starts_at <= NOW()
+        AND (g.ends_at IS NULL OR g.ends_at > NOW())
 
       UNION ALL
 

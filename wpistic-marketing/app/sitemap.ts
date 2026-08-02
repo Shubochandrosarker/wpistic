@@ -4,6 +4,8 @@ import { products } from "@/lib/products";
 import { customerStories } from "@/lib/testimonials";
 import { posts } from "@/lib/blog";
 
+export const dynamic = "force-static";
+
 const staticRoutes = [
   "",
   "/products",

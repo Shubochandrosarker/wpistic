@@ -75,6 +75,8 @@ export default function DataTable({
       reason = window.prompt('Reason (recorded in the audit log):') ?? undefined;
       if (!reason || reason.trim().length < 3) return;
     }
+    const mfaCode = window.prompt('Fresh authenticator code (required for this staff action):') ?? '';
+    if (!/^\d{6,10}$/.test(mfaCode)) return;
     setBusy(`${action.label}:${id}`);
     setMessage(null);
     try {
@@ -83,7 +85,7 @@ export default function DataTable({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           endpoint: action.endpoint.replace('{id}', id),
-          body: { ...(action.body ?? {}), ...(reason ? { reason } : {}) },
+          body: { ...(action.body ?? {}), ...(reason ? { reason } : {}), mfa_code: mfaCode },
         }),
       });
       const json = (await res.json()) as { error?: { message?: string } };

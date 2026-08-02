@@ -20,7 +20,7 @@ const categories: { icon: string; title: string; body: string; href?: string }[]
   {
     icon: "download",
     title: "Installing a product",
-    body: "Install and activate any of the eleven WPistic products on a new or existing WordPress site.",
+    body: "Install and activate any of the fifteen WPistic products on a new or existing WordPress site.",
   },
   {
     icon: "code",

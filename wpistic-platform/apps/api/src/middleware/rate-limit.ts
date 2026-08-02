@@ -14,12 +14,26 @@ import { getClientIp } from './correlation';
 const IP_LIMIT = 100;
 const API_KEY_LIMIT = 1000;
 
-async function bump(kv: KVNamespace, key: string): Promise<number> {
-  const current = parseInt((await kv.get(key)) ?? '0', 10) + 1;
-  // 120s TTL keeps the previous window around briefly; the minute in the key
-  // does the real windowing.
-  await kv.put(key, String(current), { expirationTtl: 120 });
-  return current;
+const localCounters = new Map<string, { count: number; expiresAt: number }>();
+const localLocks = new Map<string, Promise<void>>();
+
+async function bumpAtomic(key: string, windowMs: number): Promise<number> {
+  const previous = localLocks.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const currentLock = new Promise<void>((resolve) => (release = resolve));
+  const queued = previous.then(() => currentLock);
+  localLocks.set(key, queued);
+  await previous;
+  try {
+    const now = Date.now();
+    const entry = localCounters.get(key);
+    const next = !entry || entry.expiresAt <= now ? { count: 1, expiresAt: now + windowMs } : { ...entry, count: entry.count + 1 };
+    localCounters.set(key, next);
+    return next.count;
+  } finally {
+    release();
+    if (localLocks.get(key) === queued) localLocks.delete(key);
+  }
 }
 
 export const rateLimiter: MiddlewareHandler<AppContext> = async (c, next) => {
@@ -32,7 +46,9 @@ export const rateLimiter: MiddlewareHandler<AppContext> = async (c, next) => {
   const subject = isApiKey ? `key:${authHeader.slice(7, 27)}` : `ip:${getClientIp(c)}`;
   const limit = isApiKey ? API_KEY_LIMIT : IP_LIMIT;
 
-  const count = await bump(c.env.RATE_LIMIT, `rl:${subject}:${minute}`);
+  const bucket = `rl:${subject}:${minute}`;
+  const native = c.env.RATE_LIMITER ? await c.env.RATE_LIMITER.limit({ key: subject }) : null;
+  const count = native ? (native.success ? 1 : limit + 1) : await bumpAtomic(bucket, 60_000);
   c.header('X-RateLimit-Limit', String(limit));
   c.header('X-RateLimit-Remaining', String(Math.max(0, limit - count)));
 
@@ -57,7 +73,7 @@ export function strictLimiter(bucket: string, limit: number, windowSeconds: numb
   return async (c, next) => {
     const window = Math.floor(Date.now() / (windowSeconds * 1000));
     const key = `rl:${bucket}:${getClientIp(c)}:${window}`;
-    const count = parseInt((await c.env.RATE_LIMIT.get(key)) ?? '0', 10);
+    const count = await bumpAtomic(key, windowSeconds * 1000);
     if (count >= limit) {
       c.header('Retry-After', String(windowSeconds));
       return c.json(
@@ -72,9 +88,5 @@ export function strictLimiter(bucket: string, limit: number, windowSeconds: numb
       );
     }
     await next();
-    // Only count failures so legitimate traffic is never throttled.
-    if (c.res.status >= 400) {
-      await c.env.RATE_LIMIT.put(key, String(count + 1), { expirationTtl: windowSeconds + 60 });
-    }
   };
 }

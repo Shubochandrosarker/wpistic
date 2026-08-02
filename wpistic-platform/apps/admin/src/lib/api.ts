@@ -1,6 +1,6 @@
 /**
  * Server-side admin API client. Runs only in the Astro Worker — the
- * ADMIN_API_TOKEN never reaches the browser. Client-side islands that need
+ * Staff access tokens never reach the browser. Client-side islands that need
  * mutations call the same-origin /api/proxy endpoint instead.
  */
 import type { AstroGlobal } from 'astro';
@@ -12,14 +12,15 @@ export interface AdminApiContext {
 
 export function adminContext(Astro: AstroGlobal): AdminApiContext {
   const env = Astro.locals.runtime.env;
-  return { apiUrl: env.API_URL, token: env.ADMIN_API_TOKEN };
+  const token = Astro.locals.admin?.accessToken;
+  if (!token) throw new Error('Admin session is required');
+  return { apiUrl: env.API_URL, token };
 }
 
 export async function adminGet<T>(ctx: AdminApiContext, endpoint: string): Promise<T> {
   const res = await fetch(`${ctx.apiUrl}/api/v1/admin${endpoint}`, {
     headers: {
       Authorization: `Bearer ${ctx.token}`,
-      'X-Admin-Role': 'super_admin',
       Accept: 'application/json',
     },
   });
@@ -35,7 +36,6 @@ export async function adminPost<T>(ctx: AdminApiContext, endpoint: string, body:
     method: 'POST',
     headers: {
       Authorization: `Bearer ${ctx.token}`,
-      'X-Admin-Role': 'super_admin',
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },

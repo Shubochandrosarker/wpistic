@@ -31,7 +31,7 @@ const maxRevenue = Math.max(1, ...(data?.revenue_by_day ?? []).map((d) => Number
 <AdminLayout title="Dashboard" active="dashboard">
   <h1 class="text-xl font-semibold tracking-tight mb-6">Platform overview</h1>
 
-  {error && <p class="text-sm text-red-300 mb-6">{error} — check ADMIN_API_TOKEN configuration.</p>}
+  {error && <p class="text-sm text-red-300 mb-6">{error} — verify staff OAuth access and API connectivity.</p>}
 
   {
     data && (

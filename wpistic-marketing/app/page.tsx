@@ -47,7 +47,7 @@ export default function HomePage() {
                 One dashboard for every WordPress product your business runs on.
               </h1>
               <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink-600">
-                Chat, CRM, bookings, memberships, analytics, and licensing — eleven WPistic
+                Chat, CRM, bookings, memberships, analytics, and licensing — fifteen WPistic
                 products that share one login, one bill, and one set of customer data. Not
                 WooCommerce. Not a dozen disconnected plugins.
               </p>
@@ -67,7 +67,7 @@ export default function HomePage() {
                   <Icon name="check" size={16} className="text-green-600" /> Cancel anytime
                 </span>
                 <span className="flex items-center gap-2">
-                  <Icon name="check" size={16} className="text-green-600" /> 14-day free trial
+                  <Icon name="check" size={16} className="text-green-600" /> Card-free free access
                 </span>
               </div>
             </div>
@@ -128,8 +128,8 @@ export default function HomePage() {
           <div className="flex flex-wrap items-end justify-between gap-6">
             <SectionHeading
               eyebrow="The product suite"
-              title="Eleven products. One account."
-              description="Run one, run all eleven — every WPistic product shares entitlements, billing, and customer data through the same dashboard."
+              title="Fifteen products. One account."
+              description="Run one, run all fifteen — every WPistic product shares entitlements, billing, and customer data through the same dashboard."
             />
             <Button href="/products" variant="outline" icon="arrow">
               Browse all products
@@ -179,7 +179,7 @@ export default function HomePage() {
             <Stat value="11" label="Products in the suite" />
             <Stat value="1" label="Dashboard login" />
             <Stat value="13mo" label="Analytics retention, no sampling" />
-            <Stat value="14-day" label="Free trial, every plan" />
+                <Stat value="Free" label="Card-free launch access" />
           </div>
         </Container>
       </Section>
@@ -213,7 +213,7 @@ export default function HomePage() {
                 Free to start. One bill once you grow.
               </h2>
               <p className="mt-4 max-w-md text-[15px] leading-relaxed text-ink-300">
-                Every plan includes a 14-day trial of the full suite. From a single free product
+            Start with card-free access to a free product. Paid plans are coming soon; from a single free product
                 to an unlimited agency account — see exactly what's included on the pricing page.
               </p>
               <Button href="/pricing" variant="white" size="lg" className="mt-8" icon="arrow">

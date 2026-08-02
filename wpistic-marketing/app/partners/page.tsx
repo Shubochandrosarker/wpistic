@@ -94,7 +94,7 @@ export default function PartnersPage() {
                 <Icon name="layers" size={20} />
               </div>
               <h3 className="font-display mt-4 text-base font-bold text-ink-900">
-                One stack per client, not eleven decisions
+                One stack per client, not fifteen decisions
               </h3>
               <p className="mt-2 text-[14px] leading-relaxed text-ink-600">
                 Standardize client builds on a suite that already integrates, instead of

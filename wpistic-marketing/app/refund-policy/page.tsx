@@ -7,7 +7,7 @@ import { site } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Refund Policy",
   description:
-    "How free trials, monthly and annual billing, cancellations, and refunds work across WPistic subscriptions.",
+    "How card-free launch access works now and how refunds will work after paid WPistic subscriptions are enabled.",
 };
 
 const LAST_UPDATED = "June 1, 2026";
@@ -32,14 +32,12 @@ export default function RefundPolicyPage() {
         </p>
 
         <h2 className="font-display text-xl font-bold text-ink-900 mt-10 mb-3">
-          1. Free Trial
+          1. Free Launch Access
         </h2>
         <p className="text-ink-600 leading-relaxed mb-4">
-          Starter, Professional, and Business plans include a 14-day free trial. You won't be
-          charged during the trial, and you can cancel at any time before it ends from the
-          dashboard without being billed. If you don't cancel, your subscription converts
-          automatically to a paid plan at the end of the trial and billing begins on the plan and
-          cycle you selected when you signed up.
+          WPistic is launching in FREE_ONLY mode. Free product claims require no card, create no
+          Stripe checkout, and do not create a paid subscription. Paid plans and checkout remain
+          disabled until the business payment account, webhooks, and launch approval are ready.
         </p>
 
         <h2 className="font-display text-xl font-bold text-ink-900 mt-10 mb-3">
