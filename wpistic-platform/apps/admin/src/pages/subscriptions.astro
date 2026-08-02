@@ -1,0 +1,57 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+import DataTable from '../components/DataTable.tsx';
+import { adminContext, adminGet, shortDate } from '../lib/api';
+
+interface SubscriptionsResponse {
+  subscriptions: Array<{
+    id: string;
+    status: string;
+    stripe_subscription_id: string | null;
+    organization: string;
+    current_period_end: string | null;
+    cancel_at_period_end: boolean;
+    items: Array<{ product: string; plan: string }>;
+    created_at: string;
+  }>;
+}
+
+const data = await adminGet<SubscriptionsResponse>(adminContext(Astro), '/subscriptions');
+const rows = data.subscriptions.map((s) => ({
+  id: s.id,
+  organization: s.organization,
+  items: s.items.map((i) => `${i.product}/${i.plan}`).join(', ') || '—',
+  status: s.status,
+  period_end: s.cancel_at_period_end
+    ? `ends ${shortDate(s.current_period_end)}`
+    : (shortDate(s.current_period_end) ?? '—'),
+  stripe: s.stripe_subscription_id ?? '—',
+}));
+---
+
+<AdminLayout title="Subscriptions" active="subscriptions">
+  <div class="mb-6">
+    <h1 class="text-xl font-semibold tracking-tight">Subscriptions</h1>
+    <p class="text-sm text-muted mt-1">Stripe is the processor; these internal records are the authorization source.</p>
+  </div>
+  <DataTable
+    client:load
+    columns={[
+      { key: 'organization', label: 'Organization' },
+      { key: 'items', label: 'Products' },
+      { key: 'status', label: 'Status', badge: true },
+      { key: 'period_end', label: 'Period end' },
+      { key: 'stripe', label: 'Stripe id', mono: true },
+    ]}
+    rows={rows}
+    actions={[
+      {
+        label: 'Cancel at period end',
+        endpoint: '/subscriptions/{id}/cancel',
+        confirm: 'Cancel this subscription at period end?',
+        requireReason: true,
+        danger: true,
+      },
+    ]}
+  />
+</AdminLayout>

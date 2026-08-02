@@ -1,0 +1,53 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+import DataTable from '../components/DataTable.tsx';
+import { adminContext, adminGet, shortDate } from '../lib/api';
+
+interface CustomersResponse {
+  customers: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    status: string;
+    owner_email: string | null;
+    member_count: number;
+    active_subscriptions: number;
+    created_at: string;
+  }>;
+}
+
+const data = await adminGet<CustomersResponse>(adminContext(Astro), '/customers?limit=200');
+const rows = data.customers.map((c) => ({
+  id: c.id,
+  name: c.name,
+  owner: c.owner_email ?? '—',
+  members: c.member_count,
+  subscriptions: c.active_subscriptions,
+  status: c.status,
+  created: shortDate(c.created_at),
+}));
+---
+
+<AdminLayout title="Customers" active="customers">
+  <div class="flex items-end justify-between mb-6">
+    <div>
+      <h1 class="text-xl font-semibold tracking-tight">Customers</h1>
+      <p class="text-sm text-muted mt-1">
+        Search by organization or owner email. Impersonation requires your personal staff session + MFA — see the
+        organization detail page.
+      </p>
+    </div>
+  </div>
+  <DataTable
+    client:load
+    columns={[
+      { key: 'name', label: 'Organization' },
+      { key: 'owner', label: 'Owner email' },
+      { key: 'members', label: 'Members' },
+      { key: 'subscriptions', label: 'Active subs' },
+      { key: 'status', label: 'Status', badge: true },
+      { key: 'created', label: 'Created' },
+    ]}
+    rows={rows}
+  />
+</AdminLayout>

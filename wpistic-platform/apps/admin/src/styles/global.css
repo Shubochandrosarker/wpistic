@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply bg-background text-[#F5F5F4] antialiased;
+  }
+  body {
+    @apply font-sans text-[15px] leading-relaxed;
+  }
+  ::selection {
+    @apply bg-accent/30;
+  }
+}

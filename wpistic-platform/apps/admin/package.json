@@ -1,0 +1,30 @@
+{
+  "name": "@wpistic/admin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "admin.wpistic.com — owner/staff operations portal (Astro SSR on Workers)",
+  "scripts": {
+    "dev": "astro dev --port 4321",
+    "build": "astro build",
+    "deploy": "astro build && wrangler deploy",
+    "typecheck": "astro check"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^11.1.0",
+    "@astrojs/react": "^3.6.2",
+    "@astrojs/tailwind": "^5.1.1",
+    "@wpistic/types": "*",
+    "astro": "^4.15.9",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.8",
+    "@types/react-dom": "^18.3.0",
+    "@wpistic/ui-design-system": "*",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^5.5.4",
+    "wrangler": "^3.80.0"
+  }
+}

@@ -9,6 +9,7 @@ clean integration points.
 
 | Path | What it is |
 |------|------------|
+| `wpistic-platform/` | **Ecosystem control plane** — edge-native SaaS platform on Cloudflare Workers: `account.wpistic.com` (OAuth 2.1 SSO), `api.wpistic.com` (orgs, entitlements, licensing, billing, AI credits), `app.wpistic.com` (customer dashboard), `admin.wpistic.com` (staff portal), PostgreSQL schema, shared SDK packages, and the WordPress licensing SDK. See its README. |
 | `wpistic-core/` | Foundation plugin: custom DB tables, service layer, REST API (`wpistic/v1` + guarded fallbacks for `memberistic/v1`, `licenseistic/v1`, `wpistic-auth/v1`), security helpers, and integration adapters. |
 | `wpistic-dashboard/` | Mounts the React app at `/dashboard` with client-side routing; enqueues its Vite bundle only on dashboard routes; localizes the `wpisticBoot` object. |
 | `licenseistic-memberistic-addon/` | Event bridge: maps Memberistic subscription lifecycle → Licenseistic entitlements. |

@@ -1,0 +1,18 @@
+{
+  "name": "wpistic-admin",
+  "main": "dist/_worker.js/index.js",
+  "compatibility_date": "2026-08-02",
+  "compatibility_flags": ["nodejs_compat"],
+  "routes": [{ "pattern": "admin.wpistic.com", "custom_domain": true }],
+  "assets": {
+    "directory": "dist",
+    "binding": "ASSETS"
+  },
+  "vars": {
+    "API_URL": "https://api.wpistic.com",
+    "DASHBOARD_URL": "https://app.wpistic.com"
+  }
+  // Secrets (set via `wrangler secret put <NAME>`):
+  //   ADMIN_API_TOKEN — must match the api worker's ADMIN_API_TOKEN secret.
+  //   Optionally protect the whole hostname with Cloudflare Access.
+}
