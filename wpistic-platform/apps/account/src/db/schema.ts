@@ -176,7 +176,7 @@ export async function recordSecurityEvent(
   await sql`
     INSERT INTO security_events (user_id, organization_id, event_type, severity, ip_address, user_agent, metadata)
     VALUES (${input.userId}, ${input.organizationId ?? null}, ${input.eventType}, ${input.severity ?? 'info'},
-            ${input.ipAddress ?? null}, ${input.userAgent ?? null}, ${sql.json(input.metadata ?? {})})`;
+            ${input.ipAddress ?? null}, ${input.userAgent ?? null}, ${sql.json((input.metadata ?? {}) as never)})`;
 }
 
 export async function touchLogin(sql: Sql, userId: string): Promise<void> {

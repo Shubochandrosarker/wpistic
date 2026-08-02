@@ -44,3 +44,4 @@
   //   JWT_PRIVATE_KEY         — re-signs access tokens on org switch
   //   ADMIN_API_TOKEN         — bearer token for admin.wpistic.com server-side calls
   //   MFA_ENC_KEY             — same AES key as the account service (admin MFA checks)
+}

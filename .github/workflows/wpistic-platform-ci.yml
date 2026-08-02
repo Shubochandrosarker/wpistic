@@ -1,0 +1,68 @@
+name: wpistic-platform CI
+
+on:
+  push:
+    paths:
+      - 'wpistic-platform/**'
+      - '.github/workflows/wpistic-platform-ci.yml'
+  pull_request:
+    paths:
+      - 'wpistic-platform/**'
+      - '.github/workflows/wpistic-platform-ci.yml'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wpistic-platform
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: wpistic-platform/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck workspaces
+        run: npm run typecheck --workspace @wpistic/types --workspace @wpistic/auth-sdk --workspace @wpistic/platform-sdk --workspace @wpistic/account --workspace @wpistic/api --workspace @wpistic/dashboard
+
+      - name: Build dashboard
+        run: npm --workspace @wpistic/dashboard run build
+
+      - name: Build admin portal
+        run: npm --workspace @wpistic/admin run build
+
+      - name: Bundle account worker (dry run)
+        run: npx wrangler deploy --dry-run --outdir /tmp/account-build
+        working-directory: wpistic-platform/apps/account
+
+      - name: Bundle api worker (dry run)
+        run: npx wrangler deploy --dry-run --outdir /tmp/api-build
+        working-directory: wpistic-platform/apps/api
+
+  php-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+          coverage: none
+
+      - name: Lint WordPress SDK
+        run: |
+          for f in wpistic-platform/wordpress-sdk/src/*.php; do
+            php -l "$f"
+          done
+
+      - name: Validate composer.json
+        run: composer validate --no-check-publish
+        working-directory: wpistic-platform/wordpress-sdk

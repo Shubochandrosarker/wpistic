@@ -62,7 +62,7 @@ interface DownloadGrant extends Record<string, unknown> {
 /** Registered on the main app (public path) — see index.ts. */
 export async function handleProductUpdates(c: Context<AppContext>) {
   const sql = c.get('sql');
-  const slug = c.req.param('slug');
+  const slug = c.req.param('slug') ?? '';
   const currentVersion = c.req.query('version') ?? '0.0.0';
   const channel = c.req.query('channel') === 'beta' ? 'beta' : 'stable';
   const licenseToken = c.req.query('license_token');
