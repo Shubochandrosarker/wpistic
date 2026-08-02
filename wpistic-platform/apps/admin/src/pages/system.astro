@@ -1,0 +1,75 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+import StatCard from '../components/StatCard.astro';
+import DataTable from '../components/DataTable.tsx';
+import { adminContext, adminGet } from '../lib/api';
+
+interface SystemResponse {
+  webhook_stats: { total: number; failed: number; unprocessed: number };
+  failed_events: Array<{
+    id: string;
+    event_type: string;
+    provider: string;
+    provider_event_id: string | null;
+    error_message: string | null;
+    retry_count: number;
+    created_at: string;
+  }>;
+  failed_deliveries: Array<{
+    id: string;
+    event_type: string;
+    response_status: number | null;
+    error_message: string | null;
+    url: string;
+    created_at: string;
+  }>;
+}
+
+const data = await adminGet<SystemResponse>(adminContext(Astro), '/system');
+const failureRate =
+  data.webhook_stats.total > 0 ? Math.round((data.webhook_stats.failed / data.webhook_stats.total) * 100) : 0;
+---
+
+<AdminLayout title="System Health" active="system">
+  <div class="mb-6">
+    <h1 class="text-xl font-semibold tracking-tight">System health</h1>
+    <p class="text-sm text-muted mt-1">Webhook ingestion and outbound delivery over the last 24 hours.</p>
+  </div>
+
+  <div class="grid grid-cols-3 gap-4 mb-8">
+    <StatCard label="Webhook events (24h)" value={data.webhook_stats.total} />
+    <StatCard label="Failure rate" value={`${failureRate}%`} hint={`${data.webhook_stats.failed} failed`} />
+    <StatCard label="Unprocessed" value={data.webhook_stats.unprocessed} />
+  </div>
+
+  <section class="mb-8">
+    <h2 class="text-sm font-semibold text-muted uppercase tracking-wider mb-3">Failed Stripe events</h2>
+    <DataTable
+      client:load
+      searchable={false}
+      columns={[
+        { key: 'event_type', label: 'Event' },
+        { key: 'provider_event_id', label: 'Stripe id', mono: true },
+        { key: 'error_message', label: 'Error' },
+        { key: 'retry_count', label: 'Retries' },
+      ]}
+      rows={data.failed_events}
+      actions={[{ label: 'Retry', endpoint: '/webhooks/{id}/retry', confirm: 'Replay this webhook event?' }]}
+    />
+  </section>
+
+  <section>
+    <h2 class="text-sm font-semibold text-muted uppercase tracking-wider mb-3">Failed outbound deliveries</h2>
+    <DataTable
+      client:load
+      searchable={false}
+      columns={[
+        { key: 'event_type', label: 'Event' },
+        { key: 'url', label: 'Destination', mono: true },
+        { key: 'response_status', label: 'Status' },
+        { key: 'error_message', label: 'Error' },
+      ]}
+      rows={data.failed_deliveries}
+    />
+  </section>
+</AdminLayout>

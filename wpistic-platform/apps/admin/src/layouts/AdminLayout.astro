@@ -1,0 +1,73 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  active: string;
+}
+
+const { title, active } = Astro.props;
+
+const NAV = [
+  { href: '/', key: 'dashboard', label: 'Dashboard' },
+  { href: '/customers', key: 'customers', label: 'Customers' },
+  { href: '/organizations', key: 'organizations', label: 'Organizations' },
+  { href: '/licenses', key: 'licenses', label: 'Licenses' },
+  { href: '/subscriptions', key: 'subscriptions', label: 'Subscriptions' },
+  { href: '/invoices', key: 'invoices', label: 'Invoices' },
+  { href: '/audit', key: 'audit', label: 'Audit Logs' },
+  { href: '/system', key: 'system', label: 'System Health' },
+];
+---
+
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>{title} — WPistic Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="min-h-screen flex">
+      <aside class="w-56 shrink-0 border-r border-border bg-[#0D0D0E] flex flex-col">
+        <div class="px-4 py-5 flex items-center gap-2.5">
+          <span class="w-8 h-8 rounded-lg bg-accent grid place-items-center text-background font-bold">W</span>
+          <div>
+            <p class="font-semibold tracking-tight leading-none">WPistic</p>
+            <p class="text-[11px] text-muted mt-0.5">Operations</p>
+          </div>
+        </div>
+        <nav class="flex-1 px-3 space-y-0.5">
+          {
+            NAV.map((item) => (
+              <a
+                href={item.href}
+                class:list={[
+                  'block px-3 py-2 rounded-lg text-sm transition-colors',
+                  active === item.key
+                    ? 'bg-surface text-white font-medium'
+                    : 'text-[#A1A1A1] hover:text-white hover:bg-surface/60',
+                ]}
+              >
+                {item.label}
+              </a>
+            ))
+          }
+        </nav>
+        <p class="px-4 py-4 text-[11px] text-muted border-t border-border">
+          Staff access is audited. High-risk actions require confirmation and a reason.
+        </p>
+      </aside>
+      <main class="flex-1 min-w-0 px-6 py-6 max-w-6xl">
+        <slot />
+      </main>
+    </div>
+  </body>
+</html>

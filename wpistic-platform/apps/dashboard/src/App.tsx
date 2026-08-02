@@ -15,6 +15,7 @@ import { Security } from './pages/Security';
 import { Settings } from './pages/Settings';
 import { AuthCallback } from './pages/AuthCallback';
 import { AcceptInvitation } from './pages/AcceptInvitation';
+import { Impersonate } from './pages/Impersonate';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -52,6 +53,7 @@ export function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/auth/impersonate" element={<Impersonate />} />
           <Route
             element={
               <Protected>

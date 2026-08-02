@@ -1,0 +1,50 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+import DataTable from '../components/DataTable.tsx';
+import { adminContext, adminGet, money, shortDate } from '../lib/api';
+
+interface InvoicesResponse {
+  invoices: Array<{
+    id: string;
+    stripe_invoice_id: string | null;
+    organization: string;
+    amount_due: number;
+    amount_paid: number;
+    currency: string;
+    status: string;
+    pdf_url: string | null;
+    paid_at: string | null;
+    created_at: string;
+  }>;
+}
+
+const data = await adminGet<InvoicesResponse>(adminContext(Astro), '/invoices');
+const rows = data.invoices.map((i) => ({
+  id: i.id,
+  organization: i.organization,
+  amount: money(i.amount_due, i.currency),
+  status: i.status,
+  paid: i.paid_at ? shortDate(i.paid_at) : '—',
+  created: shortDate(i.created_at),
+  pdf: i.pdf_url ? 'available' : '—',
+}));
+---
+
+<AdminLayout title="Invoices" active="invoices">
+  <div class="mb-6">
+    <h1 class="text-xl font-semibold tracking-tight">Invoices</h1>
+    <p class="text-sm text-muted mt-1">Refunds and resends run through the Stripe dashboard for v1.</p>
+  </div>
+  <DataTable
+    client:load
+    columns={[
+      { key: 'organization', label: 'Organization' },
+      { key: 'amount', label: 'Amount' },
+      { key: 'status', label: 'Status', badge: true },
+      { key: 'paid', label: 'Paid' },
+      { key: 'created', label: 'Created' },
+      { key: 'pdf', label: 'PDF' },
+    ]}
+    rows={rows}
+  />
+</AdminLayout>

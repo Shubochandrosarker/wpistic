@@ -1,0 +1,82 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+import DataTable from '../components/DataTable.tsx';
+import { adminContext, adminGet, shortDate } from '../lib/api';
+
+interface LicensesResponse {
+  licenses: Array<{
+    id: string;
+    key_mask: string;
+    status: string;
+    product: string;
+    organization: string;
+    active_activations: number;
+    max_activations: number;
+    expires_at: string | null;
+    created_at: string;
+  }>;
+}
+
+const data = await adminGet<LicensesResponse>(adminContext(Astro), '/licenses');
+const rows = data.licenses.map((l) => ({
+  id: l.id,
+  key: l.key_mask,
+  product: l.product,
+  organization: l.organization,
+  activations: `${l.active_activations}/${l.max_activations}`,
+  status: l.status,
+  expires: l.expires_at ? shortDate(l.expires_at) : 'never',
+}));
+---
+
+<AdminLayout title="Licenses" active="licenses">
+  <div class="mb-6">
+    <h1 class="text-xl font-semibold tracking-tight">Licenses</h1>
+    <p class="text-sm text-muted mt-1">
+      Search by key prefix, mask, organization, or activated domain. Actions are audited with your reason.
+    </p>
+  </div>
+  <DataTable
+    client:load
+    columns={[
+      { key: 'key', label: 'Key', mono: true },
+      { key: 'product', label: 'Product' },
+      { key: 'organization', label: 'Organization' },
+      { key: 'activations', label: 'Activations' },
+      { key: 'status', label: 'Status', badge: true },
+      { key: 'expires', label: 'Expires' },
+    ]}
+    rows={rows}
+    actions={[
+      {
+        label: 'Suspend',
+        endpoint: '/licenses/{id}/action',
+        body: { action: 'suspend' },
+        confirm: 'Suspend this license? Plugin validation will fail until reactivated.',
+        requireReason: true,
+        danger: true,
+      },
+      {
+        label: 'Reactivate',
+        endpoint: '/licenses/{id}/action',
+        body: { action: 'reactivate' },
+        requireReason: true,
+      },
+      {
+        label: 'Reset activations',
+        endpoint: '/licenses/{id}/action',
+        body: { action: 'reset_activations' },
+        confirm: 'Deactivate every site on this license?',
+        requireReason: true,
+      },
+      {
+        label: 'Revoke',
+        endpoint: '/licenses/{id}/action',
+        body: { action: 'revoke' },
+        confirm: 'PERMANENTLY revoke this license? This cannot be undone from here.',
+        requireReason: true,
+        danger: true,
+      },
+    ]}
+  />
+</AdminLayout>

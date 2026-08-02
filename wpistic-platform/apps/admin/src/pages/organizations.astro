@@ -1,0 +1,127 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+import DataTable from '../components/DataTable.tsx';
+import { adminContext, adminGet, shortDate } from '../lib/api';
+
+const ctx = adminContext(Astro);
+const focus = Astro.url.searchParams.get('focus');
+
+interface OrgDetail {
+  organization: { id: string; name: string; slug: string; billing_email: string | null; status: string; created_at: string };
+  members: Array<{ id: string; role: string; status: string; email: string; first_name: string | null }>;
+  subscriptions: Array<{ id: string; status: string; stripe_subscription_id: string | null; current_period_end: string | null }>;
+  licenses: Array<{ id: string; key_mask: string; status: string; product: string; max_activations: number }>;
+  websites: Array<{ id: string; domain_normalized: string; environment: string; is_connected: boolean; health_status: string }>;
+  timeline: Array<{ action: string; resource_type: string; actor_type: string; created_at: string; correlation_id: string | null }>;
+}
+
+let detail: OrgDetail | null = null;
+if (focus) {
+  detail = await adminGet<OrgDetail>(ctx, `/organizations/${focus}`);
+}
+
+interface CustomersResponse {
+  customers: Array<{ id: string; name: string; slug: string; status: string; member_count: number; created_at: string }>;
+}
+const list = detail ? null : await adminGet<CustomersResponse>(ctx, '/customers?limit=200');
+---
+
+<AdminLayout title="Organizations" active="organizations">
+  {
+    detail ? (
+      <div>
+        <a href="/organizations" class="text-[13px] text-accent hover:underline">
+          ← All organizations
+        </a>
+        <div class="flex items-end justify-between mt-2 mb-6">
+          <div>
+            <h1 class="text-xl font-semibold tracking-tight">{detail.organization.name}</h1>
+            <p class="text-sm text-muted mt-1">
+              {detail.organization.slug} · created {shortDate(detail.organization.created_at)} ·{' '}
+              {detail.organization.billing_email ?? 'no billing email'}
+            </p>
+          </div>
+        </div>
+
+        <div class="grid lg:grid-cols-2 gap-6">
+          <section>
+            <h2 class="text-sm font-semibold text-muted uppercase tracking-wider mb-3">Members</h2>
+            <div class="bg-surface border border-border rounded-card shadow-card divide-y divide-border/60">
+              {detail.members.map((m) => (
+                <div class="flex items-center justify-between px-5 py-3">
+                  <span class="text-sm truncate">{m.email}</span>
+                  <span class="text-[12px] text-muted">{m.role}</span>
+                </div>
+              ))}
+            </div>
+
+            <h2 class="text-sm font-semibold text-muted uppercase tracking-wider mt-6 mb-3">Websites</h2>
+            <div class="bg-surface border border-border rounded-card shadow-card divide-y divide-border/60">
+              {detail.websites.length === 0 && <p class="px-5 py-3 text-sm text-muted">None</p>}
+              {detail.websites.map((w) => (
+                <div class="flex items-center justify-between px-5 py-3">
+                  <span class="text-sm font-mono">{w.domain_normalized}</span>
+                  <span class="text-[12px] text-muted">
+                    {w.environment} · {w.is_connected ? 'connected' : 'disconnected'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <h2 class="text-sm font-semibold text-muted uppercase tracking-wider mb-3">Licenses</h2>
+            <div class="bg-surface border border-border rounded-card shadow-card divide-y divide-border/60">
+              {detail.licenses.length === 0 && <p class="px-5 py-3 text-sm text-muted">None</p>}
+              {detail.licenses.map((l) => (
+                <div class="flex items-center justify-between px-5 py-3">
+                  <span class="text-[13px] font-mono truncate">{l.key_mask}</span>
+                  <span class="text-[12px] text-muted">
+                    {l.product} · {l.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <h2 class="text-sm font-semibold text-muted uppercase tracking-wider mt-6 mb-3">Recent activity</h2>
+            <div class="bg-surface border border-border rounded-card shadow-card divide-y divide-border/60 max-h-80 overflow-y-auto">
+              {detail.timeline.length === 0 && <p class="px-5 py-3 text-sm text-muted">No audit entries</p>}
+              {detail.timeline.map((t) => (
+                <div class="px-5 py-2.5">
+                  <p class="text-[13px]">
+                    <span class="font-medium">{t.action}</span>
+                    <span class="text-muted"> · {t.actor_type}</span>
+                  </p>
+                  <p class="text-[11px] text-muted">{shortDate(t.created_at)}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      </div>
+    ) : (
+      <div>
+        <h1 class="text-xl font-semibold tracking-tight mb-6">Organizations</h1>
+        <DataTable
+          client:load
+          columns={[
+            { key: 'name', label: 'Name' },
+            { key: 'slug', label: 'Slug', mono: true },
+            { key: 'members', label: 'Members' },
+            { key: 'status', label: 'Status', badge: true },
+            { key: 'created', label: 'Created' },
+          ]}
+          rows={(list?.customers ?? []).map((c) => ({
+            id: c.id,
+            name: c.name,
+            slug: c.slug,
+            members: c.member_count,
+            status: c.status,
+            created: shortDate(c.created_at),
+          }))}
+        />
+        <p class="text-[12px] text-muted mt-3">Open a detail view: /organizations?focus=&lt;org id&gt;</p>
+      </div>
+    )
+  }
+</AdminLayout>

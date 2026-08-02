@@ -1,0 +1,86 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+import StatCard from '../components/StatCard.astro';
+import { adminContext, adminGet, money, shortDate } from '../lib/api';
+
+interface StatsResponse {
+  stats: {
+    total_customers: number;
+    active_subscriptions: number;
+    active_licenses: number;
+    open_tickets: number;
+    failed_webhooks: number;
+    connected_websites: number;
+    mrr_cents: number;
+  };
+  recent_signups: Array<{ id: string; name: string; slug: string; owner_email: string | null; created_at: string }>;
+  revenue_by_day: Array<{ day: string; cents: number }>;
+}
+
+let data: StatsResponse | null = null;
+let error: string | null = null;
+try {
+  data = await adminGet<StatsResponse>(adminContext(Astro), '/stats');
+} catch (err) {
+  error = err instanceof Error ? err.message : 'Failed to load stats';
+}
+
+const maxRevenue = Math.max(1, ...(data?.revenue_by_day ?? []).map((d) => Number(d.cents)));
+---
+
+<AdminLayout title="Dashboard" active="dashboard">
+  <h1 class="text-xl font-semibold tracking-tight mb-6">Platform overview</h1>
+
+  {error && <p class="text-sm text-red-300 mb-6">{error} — check ADMIN_API_TOKEN configuration.</p>}
+
+  {
+    data && (
+      <>
+        <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+          <StatCard label="Total customers" value={data.stats.total_customers} />
+          <StatCard label="Active subscriptions" value={data.stats.active_subscriptions} />
+          <StatCard label="MRR" value={money(data.stats.mrr_cents)} hint="monthly-equivalent, entitled statuses" />
+          <StatCard label="Active licenses" value={data.stats.active_licenses} />
+          <StatCard label="Open tickets" value={data.stats.open_tickets} />
+          <StatCard label="Failed webhooks" value={data.stats.failed_webhooks} hint="unprocessed with errors" />
+        </div>
+
+        <div class="grid lg:grid-cols-2 gap-6">
+          <section>
+            <h2 class="text-sm font-semibold text-muted uppercase tracking-wider mb-3">Revenue — last 30 days</h2>
+            <div class="bg-surface border border-border rounded-card shadow-card p-5">
+              {data.revenue_by_day.length === 0 ? (
+                <p class="text-sm text-muted">No paid invoices in the last 30 days.</p>
+              ) : (
+                <div class="flex items-end gap-1 h-36">
+                  {data.revenue_by_day.map((d) => (
+                    <div
+                      class="flex-1 bg-accent/70 hover:bg-accent rounded-t-sm transition-colors min-w-[4px]"
+                      style={`height: ${Math.max(4, (Number(d.cents) / maxRevenue) * 100)}%`}
+                      title={`${d.day}: ${money(Number(d.cents))}`}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section>
+            <h2 class="text-sm font-semibold text-muted uppercase tracking-wider mb-3">Recent signups</h2>
+            <div class="bg-surface border border-border rounded-card shadow-card divide-y divide-border/60">
+              {data.recent_signups.map((org) => (
+                <a href={`/organizations?focus=${org.id}`} class="flex items-center justify-between px-5 py-3 hover:bg-surface-hover/50 transition-colors">
+                  <div class="min-w-0">
+                    <p class="text-sm font-medium truncate">{org.name}</p>
+                    <p class="text-[12px] text-muted truncate">{org.owner_email ?? org.slug}</p>
+                  </div>
+                  <span class="text-[12px] text-muted shrink-0">{shortDate(org.created_at)}</span>
+                </a>
+              ))}
+            </div>
+          </section>
+        </div>
+      </>
+    )
+  }
+</AdminLayout>

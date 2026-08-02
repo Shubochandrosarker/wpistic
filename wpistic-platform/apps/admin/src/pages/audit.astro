@@ -1,0 +1,57 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+import DataTable from '../components/DataTable.tsx';
+import { adminContext, adminGet } from '../lib/api';
+
+const correlation = Astro.url.searchParams.get('correlation_id') ?? '';
+const action = Astro.url.searchParams.get('action') ?? '';
+
+interface AuditResponse {
+  logs: Array<{
+    id: string;
+    organization: string | null;
+    actor_email: string | null;
+    actor_type: string;
+    action: string;
+    resource_type: string;
+    resource_id: string | null;
+    correlation_id: string | null;
+    ip_address: string | null;
+    created_at: string;
+  }>;
+}
+
+const params = new URLSearchParams();
+if (correlation) params.set('correlation_id', correlation);
+if (action) params.set('action', action);
+const data = await adminGet<AuditResponse>(adminContext(Astro), `/audit?${params.toString()}`);
+
+const rows = data.logs.map((l) => ({
+  id: l.id,
+  when: new Date(l.created_at).toISOString().replace('T', ' ').slice(0, 19),
+  actor: l.actor_email ?? l.actor_type,
+  action: l.action,
+  organization: l.organization ?? '—',
+  correlation: l.correlation_id ?? '—',
+  ip: l.ip_address ?? '—',
+}));
+---
+
+<AdminLayout title="Audit Logs" active="audit">
+  <div class="mb-6">
+    <h1 class="text-xl font-semibold tracking-tight">Audit logs</h1>
+    <p class="text-sm text-muted mt-1">Server-side filters: ?correlation_id=… or ?action=… — table search is client-side.</p>
+  </div>
+  <DataTable
+    client:load
+    columns={[
+      { key: 'when', label: 'When (UTC)', mono: true },
+      { key: 'actor', label: 'Actor' },
+      { key: 'action', label: 'Action' },
+      { key: 'organization', label: 'Organization' },
+      { key: 'correlation', label: 'Correlation', mono: true },
+      { key: 'ip', label: 'IP', mono: true },
+    ]}
+    rows={rows}
+  />
+</AdminLayout>
