@@ -1,0 +1,16 @@
+{
+  "name": "@wpistic/ui-design-system",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared WPistic design tokens, Tailwind preset, and CSS variables",
+  "main": "tailwind-preset.ts",
+  "exports": {
+    ".": "./tailwind-preset.ts",
+    "./tokens.css": "./tokens.css",
+    "./tailwind-preset": "./tailwind-preset.ts"
+  },
+  "peerDependencies": {
+    "tailwindcss": "^3.4.0"
+  }
+}

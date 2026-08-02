@@ -1,0 +1,16 @@
+{
+  "name": "@wpistic/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Control plane PostgreSQL schema, migrations, and seeds",
+  "scripts": {
+    "migrate": "node migrate.js up",
+    "status": "node migrate.js status",
+    "seed": "node migrate.js seed",
+    "schema": "node migrate.js schema"
+  },
+  "dependencies": {
+    "postgres": "^3.4.4"
+  }
+}

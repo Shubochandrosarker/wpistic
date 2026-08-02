@@ -1,0 +1,32 @@
+{
+  "name": "wpistic-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WPistic ecosystem control plane — federated edge-native SaaS platform on Cloudflare Workers",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "database"
+  ],
+  "scripts": {
+    "dev:account": "npm --workspace @wpistic/account run dev",
+    "dev:api": "npm --workspace @wpistic/api run dev",
+    "dev:dashboard": "npm --workspace @wpistic/dashboard run dev",
+    "dev:admin": "npm --workspace @wpistic/admin run dev",
+    "db:migrate": "npm --workspace @wpistic/database run migrate",
+    "db:seed": "npm --workspace @wpistic/database run seed",
+    "db:status": "npm --workspace @wpistic/database run status",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "deploy:account": "npm --workspace @wpistic/account run deploy",
+    "deploy:api": "npm --workspace @wpistic/api run deploy",
+    "deploy:dashboard": "npm --workspace @wpistic/dashboard run deploy",
+    "deploy:admin": "npm --workspace @wpistic/admin run deploy"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
