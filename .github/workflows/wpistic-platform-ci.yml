@@ -32,19 +32,66 @@ jobs:
       - name: Typecheck workspaces
         run: npm run typecheck --workspace @wpistic/types --workspace @wpistic/auth-sdk --workspace @wpistic/platform-sdk --workspace @wpistic/account --workspace @wpistic/api --workspace @wpistic/dashboard
 
-      - name: Build dashboard
+      - name: API tests
+        run: npm --workspace @wpistic/api run test -- --run
+
+      - name: Dashboard build
         run: npm --workspace @wpistic/dashboard run build
 
-      - name: Build admin portal
+      - name: Admin build
         run: npm --workspace @wpistic/admin run build
+
+      - name: API build
+        run: npm --workspace @wpistic/api run build
 
       - name: Bundle account worker (dry run)
         run: npx wrangler deploy --dry-run --outdir /tmp/account-build
         working-directory: wpistic-platform/apps/account
 
-      - name: Bundle api worker (dry run)
-        run: npx wrangler deploy --dry-run --outdir /tmp/api-build
-        working-directory: wpistic-platform/apps/api
+  migration-validation:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wpistic-platform
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: wpistic
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: wpistic
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wpistic"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: wpistic-platform/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply every migration to a fresh database
+        env:
+          DATABASE_URL: postgresql://wpistic:password@localhost:5432/wpistic
+        run: npm --workspace @wpistic/database run migrate
+
+      - name: Regenerate schema.sql and diff against the committed copy
+        run: |
+          npm --workspace @wpistic/database run schema
+          git diff --exit-code -- database/schema.sql || {
+            echo "::error::database/schema.sql is out of date — a migration was added/edited without running 'npm run schema'.";
+            exit 1;
+          }
 
   php-sdk:
     runs-on: ubuntu-latest
@@ -59,10 +106,21 @@ jobs:
 
       - name: Lint WordPress SDK
         run: |
-          for f in wpistic-platform/wordpress-sdk/src/*.php; do
-            php -l "$f"
-          done
+          find wpistic-platform/wordpress-sdk/src -name '*.php' -print0 | xargs -0 -n1 php -l
+          find wpistic-platform/wordpress-sdk/tests -name '*.php' -print0 | xargs -0 -n1 php -l
 
       - name: Validate composer.json
         run: composer validate --no-check-publish
+        working-directory: wpistic-platform/wordpress-sdk
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist
+        working-directory: wpistic-platform/wordpress-sdk
+
+      - name: PHP lint (phpcs, WordPress standard)
+        run: composer lint
+        working-directory: wpistic-platform/wordpress-sdk
+
+      - name: PHPUnit
+        run: composer test
         working-directory: wpistic-platform/wordpress-sdk

@@ -1,33 +1,31 @@
 /**
- * Crypto utilities: hashing, HMAC signing of license responses, activation
- * tokens (HS256 JWTs), and license key generation.
+ * Crypto utilities: hashing, license key generation, RS256 activation
+ * tokens, and the HMAC contract used to sign license validation responses.
  *
- * Signature model: responses are HMAC-SHA256 signed with a per-license
- * verification key derived as HMAC(LICENSE_SIGNING_SECRET, license_id).
- * The plugin receives the derived key once at activation, so it can verify
- * responses offline without ever holding the master secret.
+ * HMAC contract (shared verbatim with wordpress-sdk/src/Security/HmacVerifier.php):
+ *   derived_key = HMAC-SHA256(LICENSE_SIGNING_SECRET, license_key_hash)
+ *   signature   = HMAC-SHA256(derived_key, canonical_json(payload_without_signature))
+ * Both are hex-encoded — no base64 anywhere in this contract. The plugin
+ * receives `derived_key` once at activation so it can verify responses
+ * offline without ever holding the master secret.
  */
+import { SignJWT, importPKCS8, importSPKI, jwtVerify, errors as joseErrors } from 'jose';
+
 const encoder = new TextEncoder();
 
 export async function sha256Hex(input: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', encoder.encode(input));
+  return sha256HexBytes(encoder.encode(input));
+}
+
+/** SHA-256 of raw bytes — use this for binary payloads; string round-tripping corrupts non-ASCII bytes. */
+export async function sha256HexBytes(input: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', input);
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 export function randomHex(bytes = 32): string {
   const arr = crypto.getRandomValues(new Uint8Array(bytes));
   return [...arr].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-function base64UrlEncode(bytes: Uint8Array): string {
-  let str = '';
-  for (const b of bytes) str += String.fromCharCode(b);
-  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function base64UrlDecode(input: string): Uint8Array {
-  const b64 = input.replace(/-/g, '+').replace(/_/g, '/');
-  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 }
 
 async function importHmacKey(secret: string | Uint8Array): Promise<CryptoKey> {
@@ -53,11 +51,6 @@ export function timingSafeEqual(a: string, b: string): boolean {
   return out === 0;
 }
 
-/** Per-license verification key: HMAC(master, license_id), hex. */
-export function deriveLicenseVerificationKey(masterSecret: string, licenseId: string): Promise<string> {
-  return hmacSha256Hex(masterSecret, `license-verification:${licenseId}`);
-}
-
 /** Canonical JSON: recursively sorted object keys, no whitespace. */
 export function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
@@ -68,64 +61,89 @@ export function canonicalJson(value: unknown): string {
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(',')}}`;
 }
 
-/** Derive a license key from master secret and license key hash */
-export async function deriveLicenseKey(masterSecret: string, licenseKeyHash: string): Promise<string> {
+/** Per-license derived key: HMAC(master, license_key_hash), hex. */
+export function deriveLicenseKey(masterSecret: string, licenseKeyHash: string): Promise<string> {
   return hmacSha256Hex(masterSecret, licenseKeyHash);
 }
 
-/** Sign a response payload (minus `signature`) with the per-license key; hex encoding. */
-export async function signLicenseResponse(derivedKey: string, payload: Record<string, unknown>): Promise<string> {
+/** Sign a response payload (minus `signature`) with the derived key; hex encoding. */
+export async function signLicenseResponse(derivedKeyHex: string, payload: Record<string, unknown>): Promise<string> {
   const { signature: _omit, ...rest } = payload;
-  return hmacSha256Hex(derivedKey, canonicalJson(rest));
+  return hmacSha256Hex(hexToBytes(derivedKeyHex), canonicalJson(rest));
 }
 
-/** Sign a response payload (minus `signature`) with the per-license key; base64 (deprecated). */
-export async function signLicensePayload(verificationKeyHex: string, payload: Record<string, unknown>): Promise<string> {
-  const { signature: _omit, ...rest } = payload;
-  const sig = await hmacSha256(hexToBytes(verificationKeyHex), canonicalJson(rest));
-  return btoa(String.fromCharCode(...sig));
-}
-
-function hexToBytes(hex: string): Uint8Array {
+export function hexToBytes(hex: string): Uint8Array {
   const out = new Uint8Array(hex.length / 2);
   for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   return out;
 }
 
 // ---------------------------------------------------------------------------
-// Compact HS256 JWTs for activation tokens and download grants
+// RS256 activation tokens (JWT, `jose`)
 // ---------------------------------------------------------------------------
 
-export interface CompactJwtPayload {
+export interface ActivationTokenClaims {
+  sub: string; // activation_id
+  license_id: string;
+  org_id: string;
+  product_id: string;
+  domain: string;
+  environment: string;
+  installation_uuid: string;
   [key: string]: unknown;
-  exp: number;
-  iat: number;
 }
 
-export async function signCompactJwt(secret: string, payload: Record<string, unknown>, ttlSeconds: number): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  const full: CompactJwtPayload = { ...payload, iat: now, exp: now + ttlSeconds };
-  const header = base64UrlEncode(encoder.encode(JSON.stringify({ alg: 'HS256', typ: 'JWT' })));
-  const body = base64UrlEncode(encoder.encode(JSON.stringify(full)));
-  const sig = await hmacSha256(secret, `${header}.${body}`);
-  return `${header}.${body}.${base64UrlEncode(sig)}`;
+const pemCache = new Map<string, Promise<CryptoKey>>();
+
+function normalizePem(pem: string): string {
+  return pem.replace(/\\n/g, '\n');
 }
 
-export async function verifyCompactJwt<T extends Record<string, unknown>>(
-  secret: string,
+function getPrivateKey(pem: string): Promise<CryptoKey> {
+  let cached = pemCache.get(pem);
+  if (!cached) {
+    cached = importPKCS8(normalizePem(pem), 'RS256');
+    pemCache.set(pem, cached);
+  }
+  return cached;
+}
+
+function getPublicKey(pem: string): Promise<CryptoKey> {
+  let cached = pemCache.get(pem);
+  if (!cached) {
+    cached = importSPKI(normalizePem(pem), 'RS256');
+    pemCache.set(pem, cached);
+  }
+  return cached;
+}
+
+/** Sign an RS256 activation token with the platform's private key. */
+export async function signActivationToken(
+  privateKeyPem: string,
+  claims: ActivationTokenClaims,
+  ttlSeconds: number
+): Promise<string> {
+  const key = await getPrivateKey(privateKeyPem);
+  return new SignJWT({ ...claims })
+    .setProtectedHeader({ alg: 'RS256' })
+    .setSubject(claims.sub)
+    .setIssuedAt()
+    .setExpirationTime(Math.floor(Date.now() / 1000) + ttlSeconds)
+    .sign(key);
+}
+
+/** Verify an RS256 activation token; returns claims or null (never throws). */
+export async function verifyActivationToken(
+  publicKeyPem: string,
   token: string
-): Promise<(T & CompactJwtPayload) | null> {
-  const parts = token.split('.');
-  if (parts.length !== 3) return null;
-  const [header, body, sig] = parts as [string, string, string];
-  const expected = base64UrlEncode(await hmacSha256(secret, `${header}.${body}`));
-  if (!timingSafeEqual(expected, sig)) return null;
+): Promise<ActivationTokenClaims | null> {
   try {
-    const payload = JSON.parse(new TextDecoder().decode(base64UrlDecode(body))) as T & CompactJwtPayload;
-    if (typeof payload.exp !== 'number' || payload.exp < Math.floor(Date.now() / 1000)) return null;
-    return payload;
-  } catch {
-    return null;
+    const key = await getPublicKey(publicKeyPem);
+    const { payload } = await jwtVerify(token, key, { algorithms: ['RS256'] });
+    return payload as unknown as ActivationTokenClaims;
+  } catch (err) {
+    if (err instanceof joseErrors.JOSEError) return null;
+    throw err;
   }
 }
 
@@ -133,10 +151,10 @@ export async function verifyCompactJwt<T extends Record<string, unknown>>(
 // License keys
 // ---------------------------------------------------------------------------
 
-/** e.g. generateLicenseKey('seoistic') → 'seoistic_9f2c...40 hex chars' */
+/** e.g. generateLicenseKey('seoistic') → 'seoistic_9f2c...32 hex chars' */
 export function generateLicenseKey(productSlug: string): { key: string; prefix: string; mask: string } {
   const prefix = `${productSlug}_`;
-  const secret = randomHex(20); // 40 hex chars
+  const secret = randomHex(16); // 32 hex chars
   const key = `${prefix}${secret}`;
   const mask = `${prefix}****${secret.slice(-4)}`;
   return { key, prefix, mask };

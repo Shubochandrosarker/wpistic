@@ -53,8 +53,11 @@ export const ENTITLED_SUBSCRIPTION_STATUSES: readonly SubscriptionStatus[] = [
   'lifetime',
 ];
 
-export const licenseStatusSchema = z.enum(['active', 'suspended', 'expired', 'revoked', 'transferred']);
+export const licenseStatusSchema = z.enum(['active', 'suspended', 'expired', 'revoked', 'cancelled']);
 export type LicenseStatus = z.infer<typeof licenseStatusSchema>;
+
+export const activationStatusSchema = z.enum(['active', 'inactive', 'suspended']);
+export type ActivationStatus = z.infer<typeof activationStatusSchema>;
 
 export const updateChannelSchema = z.enum(['stable', 'beta', 'early_access', 'internal', 'hotfix']);
 export type UpdateChannel = z.infer<typeof updateChannelSchema>;
@@ -197,7 +200,12 @@ export type ActivateLicenseInput = z.infer<typeof activateLicenseSchema>;
 
 export const validateLicenseSchema = z.object({
   activation_token: z.string().min(10),
+  domain: z.string().min(1).max(255),
+  environment: environmentSchema,
+  installation_uuid: z.string().uuid(),
+  plugin_version: z.string().max(50).optional(),
 });
+export type ValidateLicenseInput = z.infer<typeof validateLicenseSchema>;
 
 export const deactivateLicenseSchema = z.object({
   activation_token: z.string().min(10),
@@ -210,7 +218,7 @@ export const refreshLicenseSchema = z.object({
 
 export interface LicenseValidationResponse {
   valid: boolean;
-  status: LicenseStatus | 'not_found' | 'activation_revoked';
+  status: LicenseStatus | 'grace_period' | 'activation_suspended';
   product: string;
   plan: string;
   expires_at: string | null;
@@ -225,15 +233,15 @@ export interface LicenseValidationResponse {
   check_after: number;
   /** Days the plugin may keep premium features alive if the API is unreachable. */
   grace_period_days: number;
-  /** base64 HMAC-SHA256 over the canonical JSON of this payload minus `signature`. */
+  /** Hex HMAC-SHA256 over the canonical JSON of this payload minus `signature`. */
   signature: string;
 }
 
 export interface LicenseActivationResponse extends LicenseValidationResponse {
   activation_token: string;
   /**
-   * Per-license verification key (HMAC(master, license_id)) used by the plugin
-   * to verify response signatures offline without holding the master secret.
+   * Per-license derived key (hex HMAC(master, license_key_hash)) used by the
+   * plugin to verify response signatures offline without the master secret.
    */
   verification_key: string;
 }
@@ -255,7 +263,6 @@ export const connectWebsiteSchema = z.object({
 });
 
 export const heartbeatSchema = z.object({
-  connection_token: z.string().min(10),
   wp_version: z.string().max(50).optional(),
   php_version: z.string().max(20).optional(),
   products: z

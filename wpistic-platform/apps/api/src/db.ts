@@ -2,9 +2,20 @@ import postgres from 'postgres';
 import type { Sql, TransactionSql } from 'postgres';
 import type { Env } from './env';
 
+/**
+ * One client per request (created in index.ts, torn down via `sql.end()`
+ * when the request finishes). `max: 1` pins every query in that request to
+ * a single underlying connection — required for `app.current_org_id`
+ * (set per request in middleware/tenant.ts, see setOrgRlsContext) to apply
+ * to every query, not just whichever one happens to grab that connection
+ * from a multi-connection pool. The tradeoff is that same-request queries
+ * issued concurrently (e.g. `Promise.all([...])`) queue on that one
+ * connection instead of running in parallel — an acceptable cost for RLS
+ * correctness at the connection-pool sizes a single request needs.
+ */
 export function createDb(env: Env): Sql {
   return postgres(env.HYPERDRIVE.connectionString, {
-    max: 5,
+    max: 1,
     fetch_types: false,
     prepare: false,
   });

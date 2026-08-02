@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
+import { z } from 'zod';
 import type { Context } from 'hono';
 import { checkoutSchema, BILLING_ROLES } from '@wpistic/types';
 import type { AppContext } from '../../env';
@@ -7,7 +8,7 @@ import { requireOrg, requireRole, blockImpersonation } from '../../middleware/te
 import { idempotency } from '../../middleware/idempotency';
 import { BillingService } from './service';
 import { StripeClient, verifyStripeSignature } from './stripe';
-import { LicenseService } from '../licenses/service';
+import { makeLicenseService } from '../licenses/routes';
 import { CreditService } from '../ai-credits/service';
 import { EntitlementService } from '../entitlements/service';
 
@@ -16,7 +17,7 @@ export function makeBillingService(c: Context<AppContext>): BillingService {
   const events = c.get('events');
   return new BillingService(sql, events, {
     stripe: new StripeClient(c.env.STRIPE_SECRET_KEY),
-    licenses: new LicenseService(sql, events, c.env.LICENSE_SIGNING_SECRET, c.env.SESSION_CACHE),
+    licenses: makeLicenseService(c),
     credits: new CreditService(sql, events),
     entitlements: new EntitlementService(sql, c.env.SESSION_CACHE),
     dashboardUrl: c.env.DASHBOARD_URL,
@@ -75,6 +76,25 @@ subscriptionRoutes.post('/:subscriptionId/cancel', idempotency(), async (c) => {
   return c.json({ subscription });
 });
 
+subscriptionRoutes.post('/:subscriptionId/reactivate', idempotency(), async (c) => {
+  const { orgId } = requireRole(c, BILLING_ROLES);
+  blockImpersonation(c);
+  const subscription = await makeBillingService(c).reactivateSubscription(orgId, c.req.param('subscriptionId'));
+  return c.json({ subscription });
+});
+
+subscriptionRoutes.post(
+  '/:subscriptionId/upgrade',
+  idempotency(),
+  zValidator('json', z.object({ price_id: z.string().uuid() })),
+  async (c) => {
+    const { orgId } = requireRole(c, BILLING_ROLES);
+    blockImpersonation(c);
+    const result = await makeBillingService(c).upgradeSubscription(orgId, c.req.param('subscriptionId'), c.req.valid('json').price_id);
+    return c.json(result);
+  }
+);
+
 // ---------------------------------------------------------------------------
 // /api/v1/organizations/:orgId/invoices
 // ---------------------------------------------------------------------------
@@ -107,8 +127,8 @@ stripeWebhookRoute.post('/', async (c) => {
   };
 
   const service = makeBillingService(c);
-  const isNew = await service.recordWebhookEvent(event.id, event.type, event, signature);
-  if (!isNew) {
+  const needsProcessing = await service.recordWebhookEvent(event.id, event.type, event, signature);
+  if (!needsProcessing) {
     return c.json({ received: true, duplicate: true });
   }
 

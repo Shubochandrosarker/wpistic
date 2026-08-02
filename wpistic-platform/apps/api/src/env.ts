@@ -17,6 +17,9 @@ export interface Env {
   STRIPE_SECRET_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
   LICENSE_SIGNING_SECRET: string;
+  /** RS256 keypair for license activation tokens — distinct audience from JWT_PRIVATE_KEY (dashboard access tokens). */
+  LICENSE_JWT_PRIVATE_KEY: string;
+  LICENSE_JWT_PUBLIC_KEY: string;
   JWT_PUBLIC_KEY: string;
   JWT_PRIVATE_KEY: string;
   ADMIN_API_TOKEN: string;

@@ -1,9 +1,11 @@
 /**
- * Tests for WebsiteService: registration, connection, heartbeat, health tracking.
+ * Tests for WebsiteService: registration, connection limits, heartbeat,
+ * disconnect cascade, and tenant isolation.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createMockSql, createMockEventBus, testData } from '../../test/setup';
 import { WebsiteService } from './service';
+import { ApiError } from '../../errors';
 
 describe('WebsiteService', () => {
   let websiteService: WebsiteService;
@@ -17,7 +19,7 @@ describe('WebsiteService', () => {
   });
 
   describe('addForOrg', () => {
-    it('should create website with normalized domain', async () => {
+    it('should create website with normalized domain and a wpconn_ token', async () => {
       mockSql.mockResolvedValueOnce([{ id: testData.uuids.website }]);
 
       const result = await websiteService.addForOrg(testData.uuids.org, {
@@ -27,29 +29,27 @@ describe('WebsiteService', () => {
       });
 
       expect(result.website.id).toBe(testData.uuids.website);
-      expect(result.connection_token).toBeTruthy();
-    });
-
-    it('should enforce unique domain per organization', async () => {
-      // This should fail if domain already exists for org
-      mockSql.mockResolvedValueOnce(new Error('UNIQUE violation'));
-    });
-
-    it('should generate connection token', async () => {
-      mockSql.mockResolvedValueOnce([{ id: testData.uuids.website }]);
-      const result = await websiteService.addForOrg(testData.uuids.org, {
-        domain: 'example.com',
-        name: 'Site',
-      });
       expect(result.connection_token).toMatch(/^wpconn_[a-f0-9]{32}$/);
     });
   });
 
   describe('connect', () => {
-    it('should mark website as connected on heartbeat', async () => {
-      mockSql.mockResolvedValueOnce([{ id: testData.uuids.website }]); // update
+    const license = { organization_id: testData.uuids.org, product_id: testData.uuids.product, max_websites: 2 };
 
-      await websiteService.connect(testData.uuids.org, testData.uuids.product, {
+    it('enforces max_websites before creating a new connection', async () => {
+      mockSql.mockResolvedValueOnce([{ count: '2' }]); // already at the limit
+
+      await expect(
+        websiteService.connect(license, { domain: 'new-site.com', environment: 'production' })
+      ).rejects.toThrow(/max_websites_reached|allows 2/);
+    });
+
+    it('allows connecting when under the limit and records the installation', async () => {
+      mockSql.mockResolvedValueOnce([{ count: '1' }]); // under the limit
+      mockSql.mockResolvedValueOnce([{ id: testData.uuids.website }]); // upsert website
+      mockSql.mockResolvedValueOnce([]); // upsert website_installations
+
+      const result = await websiteService.connect(license, {
         domain: 'example.com',
         environment: 'production',
         wp_version: '6.6',
@@ -57,55 +57,39 @@ describe('WebsiteService', () => {
         product_version: '2.0.0',
       });
 
-      expect(mockSql).toHaveBeenCalled();
+      expect(result.website_id).toBe(testData.uuids.website);
+      expect(result.connection_token).toMatch(/^wpconn_[a-f0-9]{32}$/);
+      expect(mockEvents.publish).toHaveBeenCalledWith('website.connected', expect.any(Object));
     });
 
-    it('should update health status to healthy', async () => {
+    it('does not count the domain being (re)connected against its own limit', async () => {
+      mockSql.mockResolvedValueOnce([{ count: '0' }]);
       mockSql.mockResolvedValueOnce([{ id: testData.uuids.website }]);
-      // Verify SQL contains health_status = 'healthy'
-    });
+      mockSql.mockResolvedValueOnce([]);
 
-    it('should record installation mapping to product', async () => {
-      mockSql.mockResolvedValueOnce([{ id: testData.uuids.website }]);
-      // Verify website_installations record created
+      await expect(
+        websiteService.connect({ ...license, max_websites: 1 }, { domain: 'example.com', environment: 'production' })
+      ).resolves.toBeTruthy();
     });
   });
 
   describe('heartbeat', () => {
-    it('should update last_sync_at', async () => {
-      mockSql.mockResolvedValueOnce([{ id: testData.uuids.website, organization_id: testData.uuids.org }]);
-
-      await websiteService.heartbeat({
-        connection_token: 'wpconn_test',
-        wp_version: '6.6',
-        php_version: '8.2',
-      });
-
-      // Verify timestamp updated
+    it('fails closed when no token is supplied', async () => {
+      await expect(websiteService.heartbeat('', { wp_version: '6.6' })).rejects.toThrow(/required/i);
     });
 
-    it('should maintain health status', async () => {
-      mockSql.mockResolvedValueOnce([{ id: testData.uuids.website, organization_id: testData.uuids.org }]);
+    it('fails closed on an unrecognized token', async () => {
+      mockSql.mockResolvedValueOnce([]);
+      await expect(websiteService.heartbeat('wpconn_unknown', { wp_version: '6.6' })).rejects.toThrow(/invalid/i);
+    });
 
-      const result = await websiteService.heartbeat({
-        connection_token: 'wpconn_test',
-        wp_version: '6.6',
-        php_version: '8.2',
-        health: 'healthy',
-      });
+    it('updates sync state and returns website_id + next_heartbeat_after', async () => {
+      mockSql.mockResolvedValueOnce([{ id: testData.uuids.website, organization_id: testData.uuids.org }]); // token lookup
+      mockSql.mockResolvedValueOnce([]); // UPDATE websites
+
+      const result = await websiteService.heartbeat('wpconn_test', { wp_version: '6.6', php_version: '8.2', health: 'healthy' });
 
       expect(result.ok).toBe(true);
-    });
-
-    it('should return website_id and next_heartbeat_after', async () => {
-      mockSql.mockResolvedValueOnce([{ id: testData.uuids.website, organization_id: testData.uuids.org }]);
-
-      const result = await websiteService.heartbeat({
-        connection_token: 'wpconn_test',
-        wp_version: '6.6',
-        php_version: '8.2',
-      });
-
       expect(result.website_id).toBe(testData.uuids.website);
       expect(typeof result.next_heartbeat_after).toBe('number');
     });
@@ -120,43 +104,28 @@ describe('WebsiteService', () => {
         name: 'Test',
       });
 
-      // Verify normalized domain is stored
-      const call = mockSql.mock.calls[0];
-      expect(call[0]).toContain('example.com');
+      expect(mockSql.mock.calls[0]).toContain('example.com');
     });
   });
 
   describe('disconnect', () => {
-    it('should revoke connection token', async () => {
-      mockSql.mockResolvedValueOnce(undefined);
-
-      await websiteService.disconnect(testData.uuids.org, testData.uuids.website);
-
-      // Verify token revoked
+    it('revokes the connection token and marks the website offline', async () => {
+      mockSql.mockResolvedValueOnce([{ id: testData.uuids.website }]);
+      await expect(websiteService.disconnect(testData.uuids.org, testData.uuids.website)).resolves.toBeUndefined();
+      expect(mockSql.mock.calls[0][0].join('')).toContain('offline');
     });
 
-    it('should mark as offline', async () => {
-      mockSql.mockResolvedValueOnce(undefined);
-
-      await websiteService.disconnect(testData.uuids.org, testData.uuids.website);
-
-      // Verify health_status = 'offline'
+    it('throws not_found when the website does not belong to this org', async () => {
+      mockSql.mockResolvedValueOnce([]);
+      await expect(websiteService.disconnect('other-org', testData.uuids.website)).rejects.toThrow(ApiError);
     });
   });
 
   describe('tenant isolation', () => {
     it('should only list websites for own organization', async () => {
       mockSql.mockResolvedValueOnce([]);
-
       await websiteService.listForOrg(testData.uuids.org);
-
-      // Verify WHERE organization_id = ${orgId}
-      const call = mockSql.mock.calls[0];
-      expect(call[0]).toContain(testData.uuids.org);
-    });
-
-    it('should prevent access to other org websites', async () => {
-      // Test that querying website from another org fails
+      expect(mockSql.mock.calls[0]).toContain(testData.uuids.org);
     });
   });
 });

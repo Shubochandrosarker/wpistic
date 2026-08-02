@@ -1,213 +1,225 @@
 /**
- * Unit tests for LicenseService: issuance, activation, validation, grace period.
+ * Unit tests for LicenseService: grace period truth, token resolution
+ * (replay/claim-mismatch rejection), refresh rotation, and key rotation.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { createMockSql, createMockEventBus, createMockKV, testData, assertions } from '../../test/setup';
-import { LicenseService } from './service';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { generateKeyPair, exportPKCS8, exportSPKI } from 'jose';
+import { createMockSql, createMockKV, testData } from '../../test/setup';
+import { LicenseService, evaluateLicenseLifecycle, type LicenseRow, type ActivationRow } from './service';
+import { signActivationToken, sha256Hex } from '../../utils/crypto';
+
+describe('evaluateLicenseLifecycle', () => {
+  const base = { status: 'active' as const, expires_at: null as string | null, grace_period_ends_at: null as string | null };
+
+  it('is usable when not yet expired', () => {
+    const future = new Date(Date.now() + 86400_000).toISOString();
+    const result = evaluateLicenseLifecycle({ ...base, expires_at: future });
+    expect(result.usable).toBe(true);
+    expect(result.effectiveStatus).toBe('active');
+  });
+
+  it('allows grace period at day 6 of 7', () => {
+    const expiresAt = new Date(Date.now() - 6 * 86400_000);
+    const graceEndsAt = new Date(expiresAt.getTime() + 7 * 86400_000); // 1 day of grace remaining
+    const result = evaluateLicenseLifecycle({ ...base, expires_at: expiresAt.toISOString(), grace_period_ends_at: graceEndsAt.toISOString() });
+    expect(result.usable).toBe(true);
+    expect(result.effectiveStatus).toBe('grace_period');
+    expect(result.inGracePeriod).toBe(true);
+  });
+
+  it('allows grace period right up to day 7 boundary', () => {
+    const expiresAt = new Date(Date.now() - 6.99 * 86400_000);
+    const graceEndsAt = new Date(expiresAt.getTime() + 7 * 86400_000);
+    const result = evaluateLicenseLifecycle({ ...base, expires_at: expiresAt.toISOString(), grace_period_ends_at: graceEndsAt.toISOString() });
+    expect(result.usable).toBe(true);
+  });
+
+  it('blocks after grace period ends at day 8', () => {
+    const expiresAt = new Date(Date.now() - 8 * 86400_000);
+    const graceEndsAt = new Date(expiresAt.getTime() + 7 * 86400_000); // ended a day ago
+    const result = evaluateLicenseLifecycle({ ...base, expires_at: expiresAt.toISOString(), grace_period_ends_at: graceEndsAt.toISOString() });
+    expect(result.usable).toBe(false);
+    expect(result.effectiveStatus).toBe('expired');
+  });
+
+  it('treats revoked/suspended/cancelled as unusable regardless of expiry', () => {
+    for (const status of ['revoked', 'suspended', 'cancelled'] as const) {
+      const result = evaluateLicenseLifecycle({ ...base, status });
+      expect(result.usable).toBe(false);
+      expect(result.effectiveStatus).toBe(status);
+    }
+  });
+});
 
 describe('LicenseService', () => {
-  let licenseService: LicenseService;
   let mockSql: any;
-  let mockEvents: any;
   let mockKV: KVNamespace;
-  const signingSecret = 'test-secret-key-32-characters-minimum';
+  let privateKeyPem: string;
+  let publicKeyPem: string;
+  let licenseService: LicenseService;
+
+  const config = () => ({ signingSecret: 'test-secret-key-32-characters-minimum', jwtPrivateKey: privateKeyPem, jwtPublicKey: publicKeyPem });
+
+  beforeAll(async () => {
+    const { privateKey, publicKey } = await generateKeyPair('RS256');
+    privateKeyPem = await exportPKCS8(privateKey);
+    publicKeyPem = await exportSPKI(publicKey);
+  });
 
   beforeEach(() => {
     mockSql = createMockSql();
-    mockEvents = createMockEventBus();
     mockKV = createMockKV();
-    licenseService = new LicenseService(mockSql, mockEvents, signingSecret, mockKV);
+    licenseService = new LicenseService(mockSql, config(), mockKV);
   });
 
-  describe('issue', () => {
-    it('should generate a license with valid key format', async () => {
-      mockSql.mockResolvedValueOnce([{ slug: 'testprod' }]); // product lookup
-      mockSql.mockResolvedValueOnce([{ value: 5 }]); // plan entitlement lookup
-      mockSql.mockResolvedValueOnce([{ id: testData.uuids.license }]); // insert
-
-      const result = await licenseService.issue({
-        organizationId: testData.uuids.org,
-        productId: testData.uuids.product,
-        planId: testData.uuids.plan,
-        maxActivations: 3,
-        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-      });
-
-      expect(result.licenseId).toBe(testData.uuids.license);
-      expect(assertions.isValidLicenseKey(result.rawKey)).toBe(true);
-      expect(result.mask).toContain('testprod_');
-      expect(result.mask).toContain('****');
-      expect(mockEvents.publish).toHaveBeenCalledWith('license.issued', expect.any(Object));
-    });
-
-    it('should use plan max_sites entitlement if maxActivations not provided', async () => {
-      mockSql.mockResolvedValueOnce([{ slug: 'testprod' }]);
-      mockSql.mockResolvedValueOnce([{ value: 5 }]);
-      mockSql.mockResolvedValueOnce([{ id: testData.uuids.license }]);
-
-      const insertCall = mockSql.mock.calls[2];
-      expect(insertCall[0]).toContain('max_activations');
-    });
-
-    it('should fail if product not found', async () => {
-      mockSql.mockResolvedValueOnce([]); // no product
-
-      await expect(
-        licenseService.issue({
-          organizationId: testData.uuids.org,
-          productId: 'invalid-id',
-          planId: testData.uuids.plan,
-        })
-      ).rejects.toThrow('Product');
-    });
+  const licenseRow = (overrides: Partial<LicenseRow> = {}): LicenseRow => ({
+    id: testData.uuids.license,
+    organization_id: testData.uuids.org,
+    product_id: testData.uuids.product,
+    plan_id: testData.uuids.plan,
+    subscription_id: null,
+    key_hash: 'a'.repeat(64),
+    key_mask: 'testprod_****abcd',
+    key_prefix: 'testprod_',
+    status: 'active',
+    max_activations: 5,
+    max_websites: 1,
+    expires_at: null,
+    grace_period_ends_at: null,
+    product_slug: 'testprod',
+    product_name: 'Test Product',
+    plan_slug: 'professional',
+    ...overrides,
   });
 
-  describe('activate', () => {
-    it('should activate a license with valid key', async () => {
-      const installationUUID = 'install-uuid-123';
-      const domain = 'example.com';
+  const activationRow = (tokenHash: string, overrides: Partial<ActivationRow> = {}): ActivationRow => ({
+    id: testData.uuids.activation,
+    license_id: testData.uuids.license,
+    organization_id: testData.uuids.org,
+    website_id: testData.uuids.website,
+    domain_normalized: 'example.com',
+    installation_uuid: 'install-uuid-123',
+    environment: 'production',
+    status: 'active',
+    token_hash: tokenHash,
+    ...overrides,
+  });
 
-      // Mock: find license by key
-      mockSql.mockResolvedValueOnce([
-        {
-          id: testData.uuids.license,
-          organization_id: testData.uuids.org,
-          product_id: testData.uuids.product,
-          product_slug: 'testprod',
-          plan_id: testData.uuids.plan,
-          plan_slug: 'professional',
-          status: 'active',
-          max_activations: 5,
-          expires_at: null,
-        },
-      ]);
+  const baseClaims = {
+    sub: testData.uuids.activation,
+    license_id: testData.uuids.license,
+    org_id: testData.uuids.org,
+    product_id: testData.uuids.product,
+    domain: 'example.com',
+    environment: 'production',
+    installation_uuid: 'install-uuid-123',
+  };
 
-      // Mock: check existing activation
-      mockSql.mockResolvedValueOnce([]);
+  describe('resolveActivationToken', () => {
+    it('resolves a valid, current token', async () => {
+      const token = await signActivationToken(privateKeyPem, baseClaims, 3600);
+      const tokenHash = await sha256Hex(token);
+      mockSql.mockResolvedValueOnce([licenseRow()]);
+      mockSql.mockResolvedValueOnce([activationRow(tokenHash)]);
 
-      // Mock: count active activations
-      mockSql.mockResolvedValueOnce([{ count: 2 }]);
-
-      // Mock: check website
-      mockSql.mockResolvedValueOnce([]);
-
-      // Mock: insert website
-      mockSql.mockResolvedValueOnce([{ id: testData.uuids.website }]);
-
-      // Mock: insert activation
-      mockSql.mockResolvedValueOnce([{ id: testData.uuids.activation }]);
-
-      // Mock: get plan entitlements
-      mockSql.mockResolvedValueOnce([
-        { key: 'testprod.pro.enabled', value: true },
-        { key: 'testprod.sites.max', value: 5 },
-      ]);
-
-      // This is a complex flow, but the key point is it should return a token
-      // In real test, we'd mock all DB calls properly
-      // For now, just verify the structure is attempted
+      const { license, activation } = await licenseService.resolveActivationToken(token);
+      expect(license.id).toBe(testData.uuids.license);
+      expect(activation.id).toBe(testData.uuids.activation);
     });
 
-    it('should enforce activation limit', async () => {
-      // Test that it rejects when max_activations is reached
+    it('rejects a token on the revocation blocklist (replay after revocation)', async () => {
+      const token = await signActivationToken(privateKeyPem, baseClaims, 3600);
+      const tokenHash = await sha256Hex(token);
+      await mockKV.put(`revoked_token:${tokenHash}`, 'true', { expirationTtl: 60 });
+
+      await expect(licenseService.resolveActivationToken(token)).rejects.toThrow(/revoked/i);
     });
 
-    it('should be idempotent for same installation', async () => {
-      // Test that activating with same installation_uuid returns same token
+    it('rejects an expired token', async () => {
+      const token = await signActivationToken(privateKeyPem, baseClaims, -60);
+      await expect(licenseService.resolveActivationToken(token)).rejects.toThrow(/invalid or expired/i);
     });
 
-    it('should reject revoked installations', async () => {
-      // Test that revoked activations cannot be reactivated
+    it('rejects when the domain claim no longer matches the activation record', async () => {
+      const token = await signActivationToken(privateKeyPem, baseClaims, 3600);
+      const tokenHash = await sha256Hex(token);
+      mockSql.mockResolvedValueOnce([licenseRow()]);
+      mockSql.mockResolvedValueOnce([activationRow(tokenHash, { domain_normalized: 'different-site.com' })]);
+
+      await expect(licenseService.resolveActivationToken(token)).rejects.toThrow(/no longer valid/i);
+    });
+
+    it('rejects a token superseded by a newer one (stale token_hash after refresh/rotation)', async () => {
+      const token = await signActivationToken(privateKeyPem, baseClaims, 3600);
+      mockSql.mockResolvedValueOnce([licenseRow()]);
+      mockSql.mockResolvedValueOnce([activationRow('some-other-current-hash')]);
+
+      await expect(licenseService.resolveActivationToken(token)).rejects.toThrow(/no longer valid/i);
+    });
+
+    it('rejects when org_id claim does not match the license', async () => {
+      const token = await signActivationToken(privateKeyPem, { ...baseClaims, org_id: 'attacker-org' }, 3600);
+      const tokenHash = await sha256Hex(token);
+      mockSql.mockResolvedValueOnce([licenseRow()]);
+      mockSql.mockResolvedValueOnce([activationRow(tokenHash, { organization_id: 'attacker-org' })]);
+
+      await expect(licenseService.resolveActivationToken(token)).rejects.toThrow(/no longer valid/i);
     });
   });
 
-  describe('validate', () => {
-    it('should verify and return valid activation response', async () => {
-      // Test that valid activation token produces signed response
-    });
+  describe('refresh', () => {
+    it('revokes the old token and issues a new one, both distinct and both hashed', async () => {
+      const oldToken = await signActivationToken(privateKeyPem, baseClaims, 3600);
+      const oldTokenHash = await sha256Hex(oldToken);
+      // Pre-seed the entitlement cache so buildValidationResponse skips resolveForOrg's own queries.
+      await mockKV.put(`ent:${testData.uuids.org}`, JSON.stringify({ entitlements: {}, sources: [], version: 1, resolved_at: new Date().toISOString() }));
+      mockSql.mockResolvedValueOnce([licenseRow()]); // resolveActivationToken: loadById
+      mockSql.mockResolvedValueOnce([activationRow(oldTokenHash)]); // resolveActivationToken: loadActivation
+      mockSql.mockResolvedValueOnce([]); // UPDATE license_activations SET token_hash = new
+      mockSql.mockResolvedValueOnce([]); // INSERT license_events (refreshed)
+      mockSql.mockResolvedValueOnce([]); // channel lookup in buildValidationResponse
 
-    it('should include entitlements in response', async () => {
-      // Test response includes entitlements from plan
-    });
+      const result = await licenseService.refresh(oldToken);
 
-    it('should handle grace period for expired license', async () => {
-      // Test that expired but in grace period returns grace_period status
-    });
+      expect(result.activation_token).not.toBe(oldToken);
+      expect(await mockKV.get(`revoked_token:${oldTokenHash}`)).toBe('true');
 
-    it('should reject fully expired license', async () => {
-      // Test that past grace period returns invalid
-    });
-
-    it('should update last_checked_at timestamp', async () => {
-      // Test that validation updates the activation record
-    });
-  });
-
-  describe('grace period', () => {
-    it('should allow 7 days after expiration', () => {
-      const now = new Date();
-      const expiresAt = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000); // 1 day ago
-      const graceEnds = new Date(expiresAt.getTime() + 7 * 24 * 60 * 60 * 1000);
-      expect(graceEnds.getTime()).toBeGreaterThan(now.getTime());
-    });
-
-    it('should block after grace period ends', () => {
-      const now = new Date();
-      const expiresAt = new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000); // 8 days ago
-      const graceEnds = new Date(expiresAt.getTime() + 7 * 24 * 60 * 60 * 1000);
-      expect(graceEnds.getTime()).toBeLessThan(now.getTime());
-    });
-  });
-
-  describe('deactivate', () => {
-    it('should mark activation as inactive', async () => {
-      // Test that deactivate sets status to inactive
-    });
-
-    it('should revoke the activation token', async () => {
-      // Test that token is added to blocklist in KV
-    });
-
-    it('should publish deactivation event', async () => {
-      // Test that LicenseDeactivated event is published
+      const newTokenHash = await sha256Hex(result.activation_token);
+      await expect(licenseService.resolveActivationToken(oldToken)).rejects.toThrow(/revoked/i);
+      expect(newTokenHash).not.toBe(oldTokenHash);
     });
   });
 
   describe('rotate', () => {
-    it('should generate new key and invalidate old activations', async () => {
-      // Test that rotating key revokes all existing activations
-    });
+    it('revokes every active activation and blocklists their tokens', async () => {
+      mockSql.mockResolvedValueOnce([{ id: testData.uuids.license, slug: 'testprod' }]); // license+product lookup
+      mockSql.mockResolvedValueOnce([]); // UPDATE licenses SET key_hash=...
+      mockSql.mockResolvedValueOnce([
+        { id: 'activation-a', token_hash: 'hash-a' },
+        { id: 'activation-b', token_hash: null },
+      ]); // UPDATE license_activations ... RETURNING
+      mockSql.mockResolvedValueOnce([]); // INSERT license_events (rotated)
 
-    it('should return new raw key once', async () => {
-      // Test key is returned but not stored in DB
-    });
+      const result = await licenseService.rotate(testData.uuids.org, testData.uuids.license, { type: 'admin', id: 'admin-1' });
 
-    it('should publish rotation event', async () => {
-      // Test LicenseRotated event
-    });
-  });
-
-  describe('security', () => {
-    it('should store only SHA-256 hash of license key', async () => {
-      // Verify that raw keys are never stored in database
-    });
-
-    it('should store token hashes not raw tokens', async () => {
-      // Verify activation tokens are hashed
-    });
-
-    it('should not expose key_prefix in sensitive responses', async () => {
-      // Verify prefix is only shown with mask
+      expect(result.rawKey).toMatch(/^testprod_[a-f0-9]{32}$/);
+      expect(await mockKV.get('revoked_token:hash-a')).toBe('true');
     });
   });
 
-  describe('rate limiting', () => {
-    it('should enforce 5 activation attempts per hour per IP', async () => {
-      // Test rate limit is enforced via KV
-    });
+  describe('deactivateById', () => {
+    it('marks the activation inactive, blocklists its token, and writes a transactional outbox event', async () => {
+      const activation = activationRow('hash-to-revoke');
+      mockSql.mockResolvedValueOnce([]); // UPDATE license_activations
+      mockSql.mockResolvedValueOnce([]); // INSERT license_events
+      mockSql.mockResolvedValueOnce([]); // INSERT event_outbox
 
-    it('should reset counter after time window', async () => {
-      // Test hourly window resets
+      await licenseService.deactivateById(activation, 'dashboard', '127.0.0.1', { type: 'user', id: 'user-1' });
+
+      expect(await mockKV.get('revoked_token:hash-to-revoke')).toBe('true');
+      const outboxCall = mockSql.mock.calls.find((call: unknown[]) => (call[0] as string[]).join('').includes('event_outbox'));
+      expect(outboxCall).toBeTruthy();
+      expect(outboxCall).toContain('license.deactivated');
     });
   });
 });

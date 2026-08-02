@@ -105,7 +105,7 @@ separate databases, Stripe modes, OAuth clients, and secrets.
 ## Plugin SDK contract
 
 Implemented endpoints (see `apps/api/src/modules/licenses`, `websites`,
-`catalog`):
+`updates`):
 
 ```
 POST /api/v1/licenses/activate      POST /api/v1/licenses/validate
@@ -130,5 +130,14 @@ Validation responses return the full entitlement set, `check_after: 43200`,
   internal subscriptions → entitlement recalculation, AI credit grants.
 - **Phase 4 (dashboard)** & **admin portal** — complete for the specified
   pages; transactional email delivery is stubbed behind `EMAIL_WEBHOOK_URL`.
+- **Security hardening & launch readiness** — complete: RS256 activation
+  tokens, hex HMAC response signatures derived from `license_key_hash`,
+  license/activation status reconciled with the database, server-side grace
+  period, canonical updates/downloads module (single-use KV grants, R2
+  streaming), website `max_websites` enforcement, transactional outbox for
+  license/billing-webhook events, idempotent billing webhooks, RLS actually
+  wired per request (`wpistic_app` role), and a completed WordPress SDK
+  (encrypted-at-rest tokens, full PHPUnit suite). See
+  `docs/API_SPECIFICATION.md` for the current contract.
 - Next: product-app SSO rollout (Insightistic first), marketplace checkout on
   www.wpistic.com, bundles purchase flow, e2e tenant-boundary test suite.

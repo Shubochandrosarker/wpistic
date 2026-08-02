@@ -46,6 +46,7 @@ export const injectOrgContext: MiddlewareHandler<AppContext> = async (c, next) =
     }
     c.set('orgId', requested);
     c.set('orgRole', 'member');
+    await setOrgRlsContext(c, requested);
     return next();
   }
 
@@ -54,8 +55,23 @@ export const injectOrgContext: MiddlewareHandler<AppContext> = async (c, next) =
 
   c.set('orgId', requested);
   c.set('orgRole', role);
+  await setOrgRlsContext(c, requested);
   await next();
 };
+
+/**
+ * Row Level Security safety net (migration 0010, 0012): every authenticated
+ * request with a resolved org sets app.current_org_id on its (single,
+ * request-scoped — see createDb) connection before any route handler runs.
+ * This is defense-in-depth on top of the explicit organization_id filters
+ * every query already carries — it only bites if a query ever omits one,
+ * and only for a DB role that isn't the table owner/superuser (see
+ * migration 0010's note on running the API as a dedicated `wpistic_app`
+ * role in production).
+ */
+async function setOrgRlsContext(c: Context<AppContext>, organizationId: string): Promise<void> {
+  await c.get('sql')`SELECT set_config('app.current_org_id', ${organizationId}, false)`;
+}
 
 /** Guard for org-scoped routes: require a resolved org. */
 export function requireOrg(c: Context<AppContext>): { orgId: string; role: OrgRole } {
