@@ -8,7 +8,7 @@ import {
   validateLicenseSchema,
 } from '@wpistic/types';
 import type { AppContext } from '../../env';
-import { requireOrg, requireRole } from '../../middleware/tenant';
+import { blockImpersonation, requireOrg, requireRole } from '../../middleware/tenant';
 import { strictLimiter } from '../../middleware/rate-limit';
 import { idempotency } from '../../middleware/idempotency';
 import { getClientIp } from '../../middleware/correlation';
@@ -82,6 +82,7 @@ licenseRoutes.get('/:licenseId', async (c) => {
 /** Rotate the key — returns the new raw key exactly once. */
 licenseRoutes.post('/:licenseId/rotate', async (c) => {
   const { orgId } = requireRole(c, ['admin', 'product_manager']);
+  blockImpersonation(c);
   const service = svc(c);
   const { rawKey, mask } = await service.rotate(orgId, c.req.param('licenseId'));
   const { license, activations } = await service.getWithActivations(orgId, c.req.param('licenseId'));
@@ -91,6 +92,7 @@ licenseRoutes.post('/:licenseId/rotate', async (c) => {
 /** Deactivate a single site from the dashboard. */
 licenseRoutes.delete('/:licenseId/activations/:activationId', async (c) => {
   const { orgId } = requireRole(c, ['admin', 'product_manager']);
+  blockImpersonation(c);
   const sql = c.get('sql');
   const rows = await sql`
     SELECT a.id, a.license_id, a.organization_id, a.website_id, a.domain_normalized,

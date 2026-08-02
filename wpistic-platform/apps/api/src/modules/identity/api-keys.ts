@@ -6,7 +6,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import type { AppContext } from '../../env';
-import { requireRole } from '../../middleware/tenant';
+import { blockImpersonation, requireRole } from '../../middleware/tenant';
 import { randomHex, sha256Hex } from '../../utils/crypto';
 
 export const apiKeyRoutes = new Hono<AppContext>();
@@ -33,6 +33,7 @@ apiKeyRoutes.post(
   ),
   async (c) => {
     const { orgId } = requireRole(c, ['admin']);
+    blockImpersonation(c);
     const user = c.get('user')!;
     const body = c.req.valid('json');
 
@@ -52,6 +53,7 @@ apiKeyRoutes.post(
 
 apiKeyRoutes.delete('/:keyId', async (c) => {
   const { orgId } = requireRole(c, ['admin']);
+  blockImpersonation(c);
   await c.get('sql')`
     UPDATE api_keys SET revoked_at = NOW()
     WHERE id = ${c.req.param('keyId')} AND organization_id = ${orgId} AND revoked_at IS NULL`;

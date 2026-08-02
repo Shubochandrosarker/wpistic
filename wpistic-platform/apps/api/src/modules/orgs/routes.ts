@@ -5,7 +5,7 @@ import { SignJWT, importPKCS8 } from 'jose';
 import { createOrganizationSchema, switchOrgSchema, updateOrganizationSchema } from '@wpistic/types';
 import type { AppContext, Env } from '../../env';
 import { ApiError } from '../../errors';
-import { requireOrg, requireRole } from '../../middleware/tenant';
+import { blockImpersonation, requireOrg, requireRole } from '../../middleware/tenant';
 import { OrgService } from './service';
 
 function svc(c: Context<AppContext>): OrgService {
@@ -45,6 +45,7 @@ orgRoutes.get('/:orgId', async (c) => {
 
 orgRoutes.patch('/:orgId', zValidator('json', updateOrganizationSchema), async (c) => {
   const { orgId } = requireRole(c, ['admin', 'billing_manager']);
+  blockImpersonation(c);
   return c.json({ organization: await svc(c).update(orgId, c.req.valid('json')) });
 });
 
@@ -68,6 +69,10 @@ export const authRoutes = new Hono<AppContext>();
 authRoutes.post('/switch-org', zValidator('json', switchOrgSchema), async (c) => {
   const user = c.get('user');
   if (!user || c.get('authKind') !== 'jwt') throw ApiError.unauthorized();
+  // Impersonation sessions are scoped to exactly the org they were issued for
+  // (enforced in injectOrgContext) — switching context away from it here would
+  // mint an unrestricted token for a different org under the same admin login.
+  blockImpersonation(c);
   const { organization_id: targetOrgId } = c.req.valid('json');
 
   const rows = await c.get('sql')<{ role: string }[]>`

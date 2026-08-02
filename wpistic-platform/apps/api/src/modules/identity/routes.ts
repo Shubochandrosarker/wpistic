@@ -5,7 +5,7 @@ import type { Context } from 'hono';
 import { acceptInvitationSchema, inviteMemberSchema, updateMemberSchema } from '@wpistic/types';
 import type { AppContext } from '../../env';
 import { ApiError } from '../../errors';
-import { requireOrg, requireRole } from '../../middleware/tenant';
+import { blockImpersonation, requireOrg, requireRole } from '../../middleware/tenant';
 import { IdentityService } from './service';
 
 function svc(c: Context<AppContext>): IdentityService {
@@ -66,12 +66,14 @@ memberRoutes.get('/', async (c) => {
 
 memberRoutes.patch('/:membershipId', zValidator('json', updateMemberSchema), async (c) => {
   const { orgId } = requireRole(c, ['admin']);
+  blockImpersonation(c);
   const member = await svc(c).updateMemberRole(orgId, c.req.param('membershipId'), c.req.valid('json').role);
   return c.json({ member });
 });
 
 memberRoutes.delete('/:membershipId', async (c) => {
   const { orgId } = requireRole(c, ['admin']);
+  blockImpersonation(c);
   await svc(c).removeMember(orgId, c.req.param('membershipId'), currentUser(c).id);
   return c.body(null, 204);
 });
@@ -89,6 +91,7 @@ invitationRoutes.get('/', async (c) => {
 
 invitationRoutes.post('/', zValidator('json', inviteMemberSchema), async (c) => {
   const { orgId } = requireRole(c, ['admin']);
+  blockImpersonation(c);
   const body = c.req.valid('json');
   const invitation = await svc(c).createInvitation(orgId, body.email, body.role, currentUser(c).id);
   const inviteUrl = `${c.env.DASHBOARD_URL}/invitations/accept?token=${invitation.token}`;
@@ -97,6 +100,7 @@ invitationRoutes.post('/', zValidator('json', inviteMemberSchema), async (c) => 
 
 invitationRoutes.delete('/:invitationId', async (c) => {
   const { orgId } = requireRole(c, ['admin']);
+  blockImpersonation(c);
   await svc(c).revokeInvitation(orgId, c.req.param('invitationId'));
   return c.body(null, 204);
 });

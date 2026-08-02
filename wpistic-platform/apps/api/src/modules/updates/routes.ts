@@ -1,3 +1,10 @@
+/**
+ * NOT mounted in index.ts. Superseded by the org-scoped, credential-checked
+ * implementations in ../catalog/routes.ts (handleProductUpdates, downloadRoutes)
+ * — keep this module's routes delegating to the same validated LicenseService
+ * path rather than reimplementing update/download auth here, so this can
+ * never regress into an unauthenticated download bypass if it's ever wired up.
+ */
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import type { Context } from 'hono';
@@ -5,6 +12,8 @@ import { z } from 'zod';
 import type { AppContext } from '../../env';
 import { UpdatesService } from './service';
 import { ApiError } from '../../errors';
+import { LicenseService } from '../licenses/service';
+import { signCompactJwt, verifyCompactJwt } from '../../utils/crypto';
 
 const updateCheckSchema = z.object({
   version: z.string().min(1),
@@ -14,140 +23,139 @@ const updateCheckSchema = z.object({
 });
 
 const downloadAuthorizeSchema = z.object({
-  license_key: z.string().min(1),
   activation_token: z.string().min(1),
-  product_slug: z.string().min(1),
-  requested_version: z.string().min(1),
+  requested_version: z.string().min(1).optional(),
 });
+
+interface DownloadGrant extends Record<string, unknown> {
+  pkg: string; // update_packages.id
+}
 
 function svc(c: Context<AppContext>): UpdatesService {
   return new UpdatesService(c.get('sql'));
 }
 
+function licenseSvc(c: Context<AppContext>): LicenseService {
+  return new LicenseService(c.get('sql'), c.get('events'), c.env.LICENSE_SIGNING_SECRET, c.env.SESSION_CACHE);
+}
+
 /**
  * GET /products/:slug/updates
- * Check for available updates
+ * Check for available updates. Requires a valid activation_token so update
+ * metadata (versions, package hashes) is not disclosed to unauthenticated
+ * callers.
  */
-export const updateCheckRoute = new Hono<AppContext>().get(
-  '/',
-  async (c) => {
-    const slug = c.req.param('slug') ?? '';
-    const versionParam = c.req.query('version') ?? '';
-    const channel = (c.req.query('channel') ?? 'stable') as string;
-    const phpVersion = c.req.query('php_version') as string | undefined;
-    const wpVersion = c.req.query('wp_version') as string | undefined;
+export const updateCheckRoute = new Hono<AppContext>().get('/', zValidator('query', updateCheckSchema), async (c) => {
+  const slug = c.req.param('slug') ?? '';
+  const { version: currentVersion, channel, php_version: phpVersion, wp_version: wpVersion } = c.req.valid('query');
+  const activationToken = c.req.query('activation_token');
+  if (!activationToken) throw ApiError.unauthorized('activation_token is required');
 
-    if (!versionParam) {
-      throw ApiError.badRequest('missing_version', 'Current version is required');
-    }
+  const { license, activation } = await licenseSvc(c).resolveActivationToken(activationToken);
+  const expired = license.expires_at !== null && new Date(license.expires_at) < new Date();
+  if (license.product_slug !== slug || license.status !== 'active' || expired || activation.status !== 'active') {
+    throw ApiError.forbidden('License is not eligible for updates');
+  }
 
-    const update = await svc(c).findAvailableUpdate({
-      productSlug: slug,
-      currentVersion: versionParam,
-      channel,
-      phpVersion,
-      wpVersion,
-    });
+  const update = await svc(c).findAvailableUpdate({
+    productSlug: slug,
+    currentVersion,
+    channel,
+    phpVersion,
+    wpVersion,
+  });
 
-    if (!update) {
-      return c.json({
-        available: false,
-        version: null,
-        release_notes: null,
-        package_size: null,
-        checksum: null,
-        requires: null,
-        download_url: null,
-        authorize_url: '/api/v1/downloads/authorize',
-      });
-    }
-
+  if (!update) {
     return c.json({
-      available: true,
-      version: update.version,
-      release_notes: update.release_notes,
-      package_size: update.package_size_bytes,
-      checksum: update.package_checksum,
-      requires: {
-        php: update.min_php_version,
-        wp: update.min_wp_version,
-        plan: update.required_plan_id,
-      },
+      available: false,
+      version: null,
+      release_notes: null,
+      package_size: null,
+      checksum: null,
+      requires: null,
       download_url: null,
       authorize_url: '/api/v1/downloads/authorize',
     });
   }
-);
+
+  return c.json({
+    available: true,
+    version: update.version,
+    release_notes: update.release_notes,
+    package_size: update.package_size_bytes,
+    checksum: update.package_checksum,
+    requires: {
+      php: update.min_php_version,
+      wp: update.min_wp_version,
+      plan: update.required_plan_id,
+    },
+    download_url: null,
+    authorize_url: '/api/v1/downloads/authorize',
+  });
+});
 
 /**
  * POST /downloads/authorize
- * Create a single-use download token
+ * Create a single-use, HMAC-signed download token bound to a specific
+ * validated license + package (mirrors catalog/routes.ts downloadRoutes).
  */
 export const downloadAuthorizeRoute = new Hono<AppContext>().post(
   '/',
   zValidator('json', downloadAuthorizeSchema),
   async (c) => {
-    const body = c.req.valid('json');
-    const { license_key, activation_token, product_slug, requested_version } = body;
+    const { activation_token, requested_version } = c.req.valid('json');
 
-    // TODO: Validate license and activation token
-    // For now, just create the download auth token
+    const { license, activation } = await licenseSvc(c).resolveActivationToken(activation_token);
+    const expired = license.expires_at !== null && new Date(license.expires_at) < new Date();
+    if (license.status !== 'active' || expired || activation.status !== 'active') {
+      throw ApiError.forbidden('License is not eligible for downloads');
+    }
 
-    // Generate a random download auth token
-    const token = `dlauth_${Math.random().toString(16).slice(2)}`;
-
-    // Store in KV with 15-minute TTL
-    const payload = {
-      license_id: 'temp',
-      product_id: product_slug,
-      version: requested_version,
-      org_id: 'temp',
-      used: false,
-    };
-
-    const cache = c.env.SESSION_CACHE;
-    await cache.put(`download_auth:${token}`, JSON.stringify(payload), {
-      expirationTtl: 15 * 60,
+    const update = await svc(c).findAvailableUpdate({
+      productSlug: license.product_slug,
+      currentVersion: '0.0.0',
+      channel: 'stable',
     });
+    if (!update || (requested_version && update.version !== requested_version)) {
+      throw ApiError.notFound('Release');
+    }
+
+    const token = await signCompactJwt(c.env.LICENSE_SIGNING_SECRET, { pkg: update.id } satisfies DownloadGrant, 15 * 60);
 
     return c.json({
       download_url: `/api/v1/downloads/file?token=${token}`,
+      expires_in: 15 * 60,
     });
   }
 );
 
 /**
  * GET /downloads/file
- * Stream file and mark token as used
+ * Verifies the signed grant from downloadAuthorizeRoute (single source of
+ * truth: the update_packages row it was minted against) before streaming.
  */
-export const downloadFileRoute = new Hono<AppContext>().get(
-  '/',
-  async (c) => {
-    const token = c.req.query('token');
+export const downloadFileRoute = new Hono<AppContext>().get('/', async (c) => {
+  const token = c.req.query('token');
+  if (!token) throw ApiError.badRequest('missing_token', 'Download token is required');
 
-    if (!token) {
-      throw ApiError.badRequest('missing_token', 'Download token is required');
-    }
+  const grant = await verifyCompactJwt<DownloadGrant>(c.env.LICENSE_SIGNING_SECRET, token);
+  if (!grant) throw new ApiError(403, 'unauthorized', 'Download token is invalid or expired');
 
-    const cache = c.env.SESSION_CACHE;
-    const cached = await cache.get(`download_auth:${token}`);
-    if (!cached) {
-      throw new ApiError(403, 'unauthorized', 'Download token is invalid or expired');
-    }
+  const packages = await c.get('sql')<Array<{ package_path: string; version: string }>>`
+    SELECT package_path, version FROM update_packages WHERE id = ${grant.pkg} LIMIT 1`;
+  const pkg = packages[0];
+  if (!pkg) throw ApiError.notFound('Package');
 
-    const payload = JSON.parse(cached) as { used: boolean };
-    if (payload.used) {
-      throw new ApiError(403, 'forbidden', 'Download token has already been used');
-    }
+  const object = await c.env.UPDATE_PACKAGES.get(pkg.package_path);
+  if (!object) throw ApiError.notFound('Package');
 
-    // Mark as used
-    await cache.put(`download_auth:${token}`, JSON.stringify({ ...payload, used: true }), {
-      expirationTtl: 15 * 60,
-    });
-
-    // TODO: Stream file from R2
-    c.header('Content-Type', 'application/zip');
-    c.header('Content-Disposition', 'attachment; filename="package.zip"');
-    return c.json({ error: 'R2 integration not yet implemented' });
-  }
-);
+  const filename = pkg.package_path.split('/').pop() ?? `update-${pkg.version}.zip`;
+  return new Response(object.body, {
+    headers: {
+      'Content-Type': 'application/zip',
+      'Content-Length': String(object.size),
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Cache-Control': 'private, no-store',
+    },
+  });
+});
