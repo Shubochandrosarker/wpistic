@@ -1,0 +1,9 @@
+{
+  "name": "wpistic-dashboard",
+  "compatibility_date": "2026-08-02",
+  "routes": [{ "pattern": "app.wpistic.com", "custom_domain": true }],
+  "assets": {
+    "directory": "dist",
+    "not_found_handling": "single-page-application"
+  }
+}
