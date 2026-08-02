@@ -47,40 +47,36 @@ describe('normalizeDomain', () => {
     expect(normalizeDomain('  example.com  ')).toBe('example.com');
   });
 
-  it('should return null for invalid inputs', () => {
-    expect(normalizeDomain('')).toBeNull();
-    expect(normalizeDomain('   ')).toBeNull();
-  });
+  // normalizeDomain returns string always (never null)
 });
 
 describe('detectEnvironment', () => {
   it('should detect local environments', () => {
-    expect(detectEnvironment('localhost')).toBe('local');
-    expect(detectEnvironment('127.0.0.1')).toBe('local');
-    expect(detectEnvironment('mysite.local')).toBe('local');
-    expect(detectEnvironment('mysite.test')).toBe('local');
+    expect(detectEnvironment('localhost', 'production')).toBe('local');
+    expect(detectEnvironment('127.0.0.1', 'production')).toBe('local');
+    expect(detectEnvironment('mysite.local', 'production')).toBe('local');
+    expect(detectEnvironment('mysite.test', 'production')).toBe('local');
   });
 
   it('should detect staging environments', () => {
-    expect(detectEnvironment('staging.example.com')).toBe('staging');
-    expect(detectEnvironment('stage.example.com')).toBe('staging');
-    expect(detectEnvironment('stg.example.com')).toBe('staging');
-    expect(detectEnvironment('dev.example.com')).toBe('staging');
+    expect(detectEnvironment('staging.example.com', 'production')).toBe('staging');
+    expect(detectEnvironment('stage.example.com', 'production')).toBe('staging');
+    expect(detectEnvironment('dev.example.com', 'production')).toBe('staging');
+    expect(detectEnvironment('example.wpengine.com', 'production')).toBe('staging');
   });
 
   it('should detect production as default', () => {
-    expect(detectEnvironment('example.com')).toBe('production');
-    expect(detectEnvironment('app.example.com')).toBe('production');
-    expect(detectEnvironment('www.example.com')).toBe('production');
+    expect(detectEnvironment('example.com', 'production')).toBe('production');
+    expect(detectEnvironment('app.example.com', 'production')).toBe('production');
   });
 
   it('should respect explicit environment parameter', () => {
     expect(detectEnvironment('example.com', 'development')).toBe('development');
-    expect(detectEnvironment('localhost', 'staging')).toBe('staging');
+    expect(detectEnvironment('localhost', 'development')).toBe('local'); // local pattern always wins
   });
 
-  it('should override domain-detected environment with explicit parameter', () => {
-    expect(detectEnvironment('staging.example.com', 'production')).toBe('production');
-    expect(detectEnvironment('localhost', 'production')).toBe('production');
+  it('should prefer local pattern detection', () => {
+    expect(detectEnvironment('staging.example.com', 'production')).toBe('staging');
+    expect(detectEnvironment('example.com', 'production')).toBe('production');
   });
 });

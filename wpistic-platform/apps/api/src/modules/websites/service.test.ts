@@ -24,11 +24,9 @@ describe('WebsiteService', () => {
         domain: 'https://EXAMPLE.COM/',
         name: 'My Site',
         environment: 'production',
-        wp_version: '6.6',
-        php_version: '8.2',
       });
 
-      expect(result.website_id).toBe(testData.uuids.website);
+      expect(result.website.id).toBe(testData.uuids.website);
       expect(result.connection_token).toBeTruthy();
     });
 
@@ -52,13 +50,11 @@ describe('WebsiteService', () => {
       mockSql.mockResolvedValueOnce([{ id: testData.uuids.website }]); // update
 
       await websiteService.connect(testData.uuids.org, testData.uuids.product, {
-        connection_token: 'wpconn_test',
         domain: 'example.com',
         environment: 'production',
         wp_version: '6.6',
         php_version: '8.2',
-        active_theme: 'twenty-twenty-four',
-        installed_plugins: [],
+        product_version: '2.0.0',
       });
 
       expect(mockSql).toHaveBeenCalled();
@@ -76,33 +72,33 @@ describe('WebsiteService', () => {
   });
 
   describe('heartbeat', () => {
-    it('should update last_heartbeat_at', async () => {
-      mockSql.mockResolvedValueOnce([{ id: testData.uuids.website }]);
+    it('should update last_sync_at', async () => {
+      mockSql.mockResolvedValueOnce([{ id: testData.uuids.website, organization_id: testData.uuids.org }]);
 
       await websiteService.heartbeat({
         connection_token: 'wpconn_test',
         wp_version: '6.6',
         php_version: '8.2',
-        plugin_version: '2.0.0',
       });
 
       // Verify timestamp updated
     });
 
     it('should maintain health status', async () => {
-      mockSql.mockResolvedValueOnce([{ id: testData.uuids.website }]);
+      mockSql.mockResolvedValueOnce([{ id: testData.uuids.website, organization_id: testData.uuids.org }]);
 
       const result = await websiteService.heartbeat({
         connection_token: 'wpconn_test',
         wp_version: '6.6',
         php_version: '8.2',
+        health: 'healthy',
       });
 
-      expect(result.health_status).toBe('healthy');
+      expect(result.ok).toBe(true);
     });
 
-    it('should return pending commands', async () => {
-      mockSql.mockResolvedValueOnce([{ id: testData.uuids.website }]);
+    it('should return website_id and next_heartbeat_after', async () => {
+      mockSql.mockResolvedValueOnce([{ id: testData.uuids.website, organization_id: testData.uuids.org }]);
 
       const result = await websiteService.heartbeat({
         connection_token: 'wpconn_test',
@@ -110,7 +106,8 @@ describe('WebsiteService', () => {
         php_version: '8.2',
       });
 
-      expect(Array.isArray(result.pending_commands)).toBe(true);
+      expect(result.website_id).toBe(testData.uuids.website);
+      expect(typeof result.next_heartbeat_after).toBe('number');
     });
   });
 

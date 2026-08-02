@@ -23,7 +23,7 @@ describe('generateLicenseKey', () => {
     const { key, mask } = generateLicenseKey('seoistic');
     expect(mask).toContain('seoistic_');
     expect(mask).not.toContain(key.split('_')[1]);
-    expect(mask).toEndWith(key.slice(-4));
+    expect(mask).toMatch(new RegExp(key.slice(-4) + '$'));
   });
 
   it('should handle multi-word prefixes', () => {
