@@ -4,6 +4,11 @@
 **Environment:** Docker staging stack on Windows (Docker Desktop), 2026-08-02
 **Tested by:** live execution against the running stack — every finding below has reproducible evidence
 
+> **⚠️ Historical — superseded.** This report describes `8e0a9e5`. PR #14 closed all five blockers
+> (B1–B5) and H1–H3; H5, M1 (for `apps/account`) and M4 remain open. Re-verified against `4605e40`
+> by live execution — see [`docs/STAGING_REVERIFICATION.md`](docs/STAGING_REVERIFICATION.md) for
+> current status. Keep this file for the original evidence and root-cause analysis.
+
 ---
 
 ## 1. Deployment status
