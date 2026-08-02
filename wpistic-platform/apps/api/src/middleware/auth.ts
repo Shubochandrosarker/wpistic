@@ -34,6 +34,18 @@ export function isPublicPath(path: string): boolean {
   return PUBLIC_PATTERNS.some((p) => p.test(path));
 }
 
+/**
+ * `X-Admin-Role` is client-supplied (CORS-allowed) and not backed by any
+ * staff-permissions table today — nothing branches on it yet, but trusting
+ * an arbitrary string verbatim (defaulting to the most-privileged role) is a
+ * latent escalation once something does. Constrain it to a known set and
+ * default to the least-privileged role instead.
+ */
+const KNOWN_ADMIN_ROLES = ['super_admin', 'support_agent', 'billing_admin'] as const;
+export function resolveAdminRole(headerValue: string | undefined): string {
+  return headerValue && (KNOWN_ADMIN_ROLES as readonly string[]).includes(headerValue) ? headerValue : 'support_agent';
+}
+
 export const jwtAuth: MiddlewareHandler<AppContext> = async (c, next) => {
   if (c.req.method === 'OPTIONS' || isPublicPath(c.req.path)) return next();
 
@@ -47,7 +59,7 @@ export const jwtAuth: MiddlewareHandler<AppContext> = async (c, next) => {
       throw ApiError.forbidden('Admin token is only valid on admin routes');
     }
     c.set('authKind', 'admin_token');
-    c.set('adminRole', c.req.header('X-Admin-Role') ?? 'super_admin');
+    c.set('adminRole', resolveAdminRole(c.req.header('X-Admin-Role')));
     return next();
   }
 

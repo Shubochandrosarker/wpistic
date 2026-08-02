@@ -15,6 +15,7 @@ import type { AppContext, Env } from '../../env';
 import { ApiError } from '../../errors';
 import { getClientIp } from '../../middleware/correlation';
 import { decryptMfaSecret, verifyTotpCode } from '../../utils/totp';
+import { resolveAdminRole } from '../../middleware/auth';
 import { LicenseService } from '../licenses/service';
 import { EntitlementService } from '../entitlements/service';
 import { makeBillingService } from '../billing/routes';
@@ -26,7 +27,7 @@ const requireAdmin: MiddlewareHandler<AppContext> = async (c, next) => {
     const email = c.get('user')?.email?.toLowerCase();
     const allowlist = c.env.ADMIN_EMAILS.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
     if (email && allowlist.includes(email)) {
-      c.set('adminRole', c.req.header('X-Admin-Role') ?? 'super_admin');
+      c.set('adminRole', resolveAdminRole(c.req.header('X-Admin-Role')));
       return next();
     }
   }

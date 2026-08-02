@@ -135,6 +135,7 @@ export class BillingService {
         plan_id: price.plan_id,
         product_id: price.product_id,
         quantity: String(input.quantity),
+        ...(input.coupon_code ? { coupon_code: input.coupon_code } : {}),
       },
     });
     return { checkout_url: session.url };
@@ -278,6 +279,10 @@ export class BillingService {
 
       return subscriptionId;
     });
+
+    if (metadata.coupon_code) {
+      await this.sql`UPDATE coupons SET redemption_count = redemption_count + 1 WHERE code = ${metadata.coupon_code}`;
+    }
 
     // Plugin products get a license automatically; SaaS products rely on entitlements.
     if (price.product_type === 'plugin') {

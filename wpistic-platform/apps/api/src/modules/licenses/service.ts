@@ -129,6 +129,7 @@ export class LicenseService {
     if (!license) throw ApiError.badRequest('invalid_key', 'License key not recognized');
 
     this.assertUsable(license);
+    this.assertNotExpired(license);
 
     const domain = normalizeDomain(input.domain);
     if (!domain) throw ApiError.badRequest('invalid_domain', 'A valid domain is required');
@@ -403,6 +404,18 @@ export class LicenseService {
     if (license.status === 'revoked') throw ApiError.forbidden('This license has been revoked');
     if (license.status === 'suspended') throw ApiError.forbidden('This license is suspended — contact support');
     if (license.status === 'transferred') throw ApiError.forbidden('This license has been transferred');
+  }
+
+  /** Mirrors the expiry/grace-period logic in buildValidationResponse — an
+   * expired license (past its grace period) must not be able to create new
+   * activations, even though its `status` column stays 'active' until a
+   * background job flips it. */
+  private assertNotExpired(license: LicenseRow): void {
+    if (license.expires_at === null) return;
+    if (new Date(license.expires_at) >= new Date()) return;
+    const graceEnds = license.grace_period_ends_at ? new Date(license.grace_period_ends_at) : null;
+    if (graceEnds && graceEnds > new Date()) return;
+    throw ApiError.forbidden('This license has expired — renew to activate additional sites');
   }
 
   async resolveActivationToken(token: string): Promise<{ license: LicenseRow; activation: ActivationRow }> {
