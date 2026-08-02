@@ -115,7 +115,7 @@ export class UpdatesService {
                 rollout_percentage, is_security_release, is_forced, status,
                 published_at, created_at`;
 
-    if (!rows[0]) throw ApiError.internalServerError('Failed to create update package');
+    if (!rows[0]) throw new ApiError(500, 'internal_error', 'Failed to create update package');
     return rows[0];
   }
 }

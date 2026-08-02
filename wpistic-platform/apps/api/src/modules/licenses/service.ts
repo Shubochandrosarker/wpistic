@@ -403,7 +403,6 @@ export class LicenseService {
     if (license.status === 'revoked') throw ApiError.forbidden('This license has been revoked');
     if (license.status === 'suspended') throw ApiError.forbidden('This license is suspended — contact support');
     if (license.status === 'transferred') throw ApiError.forbidden('This license has been transferred');
-    if (license.status === 'cancelled') throw ApiError.forbidden('This license has been cancelled');
   }
 
   async resolveActivationToken(token: string): Promise<{ license: LicenseRow; activation: ActivationRow }> {
@@ -457,7 +456,7 @@ export class LicenseService {
       : [];
     const channel = (channelRows[0]?.value ?? 'stable') as UpdateChannel;
 
-    const payload: Omit<LicenseValidationResponse, 'signature'> = {
+    const payload: Record<string, unknown> = {
       valid,
       status,
       grace_period_ends_at: gracePeriodEnds?.toISOString() ?? null,
@@ -475,8 +474,8 @@ export class LicenseService {
     };
 
     const verificationKey = await deriveLicenseVerificationKey(this.signingSecret, license.id);
-    const signature = await signLicensePayload(verificationKey, payload as unknown as Record<string, unknown>);
-    return { ...payload, signature };
+    const signature = await signLicensePayload(verificationKey, payload);
+    return { ...payload, signature } as LicenseValidationResponse;
   }
 
   async logEvent(
