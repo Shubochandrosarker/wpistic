@@ -110,6 +110,37 @@ describe('HMAC contract: deriveLicenseKey + signLicenseResponse', () => {
     const payload = { valid: true };
     expect(await signLicenseResponse(keyA, payload)).not.toBe(await signLicenseResponse(keyB, payload));
   });
+
+  // Golden vector shared verbatim with the WordPress SDK
+  // (wordpress-sdk/tests/phpunit/HmacVerifierTest.php::testGoldenVectorMatchesPlatformApi).
+  // Pins the full contract — hex encoding, null values kept, slashes and
+  // unicode unescaped — so a change on either side fails one of the tests.
+  it('matches the cross-language golden vector verified by the PHP SDK', async () => {
+    const licenseKeyHash = await sha256Hex('insightistic_0123456789abcdef0123456789abcdef');
+    expect(licenseKeyHash).toBe('7b84bfc5409cb8a396e77170e06ef708e47a11c977d0927bbb44ebd577e1fa62');
+
+    const derivedKey = await deriveLicenseKey('wpistic-golden-vector-master-secret', licenseKeyHash);
+    expect(derivedKey).toBe('2af17247559acf975100e3e5ea4fbbd5e6a8336bd80ef3e4c7bee351ffa12adb');
+
+    const payload = {
+      valid: true,
+      status: 'active',
+      plan: 'professional',
+      product: 'insightistic',
+      expires_at: '2027-01-01T00:00:00Z',
+      grace_period_ends_at: null,
+      check_again_after: 43200,
+      portal_url: 'https://app.wpistic.com/licenses',
+    };
+    expect(canonicalJson(payload)).toBe(
+      '{"check_again_after":43200,"expires_at":"2027-01-01T00:00:00Z","grace_period_ends_at":null,' +
+        '"plan":"professional","portal_url":"https://app.wpistic.com/licenses","product":"insightistic",' +
+        '"status":"active","valid":true}'
+    );
+
+    const signature = await signLicenseResponse(derivedKey, payload);
+    expect(signature).toBe('a7e17a8766ed9ad2fcef29d183379ed11e393a224421d3470599383cc814b013');
+  });
 });
 
 describe('RS256 activation tokens', () => {

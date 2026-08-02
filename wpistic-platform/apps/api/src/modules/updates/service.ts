@@ -6,7 +6,7 @@
  */
 import type { Sql } from 'postgres';
 import { ApiError } from '../../errors';
-import { sha256Hex } from '../../utils/crypto';
+import { randomHex, sha256Hex } from '../../utils/crypto';
 import { compareVersions, isNewerVersion } from '../../utils/semver';
 
 export interface UpdatePackage {
@@ -197,27 +197,48 @@ export interface DownloadGrant {
   version: string;
   package_path: string;
   org_id: string;
+  installation_uuid?: string | null;
 }
 
-/** Issue a single-use, KV-backed download grant (spec 5.2): opaque token, 15-minute TTL. */
-export async function createDownloadGrant(cache: KVNamespace, grant: DownloadGrant, ttlSeconds: number): Promise<string> {
-  const token = crypto.randomUUID();
-  await cache.put(`download_auth:${token}`, JSON.stringify(grant), { expirationTtl: ttlSeconds });
+/**
+ * Issue a single-use download grant (spec 5.2): opaque token, 15-minute TTL.
+ * Only the SHA-256 of the token is stored, so a database leak cannot be
+ * replayed into downloads.
+ */
+export async function createDownloadGrant(sql: Sql, grant: DownloadGrant, ttlSeconds: number): Promise<string> {
+  const token = `dl_${randomHex(32)}`;
+  const tokenHash = await sha256Hex(token);
+  await sql`
+    INSERT INTO download_grants (token_hash, license_id, product_id, organization_id, version, package_path, installation_uuid, expires_at)
+    VALUES (${tokenHash}, ${grant.license_id}, ${grant.product_id}, ${grant.org_id}, ${grant.version},
+            ${grant.package_path}, ${grant.installation_uuid ?? null}, NOW() + make_interval(secs => ${ttlSeconds}))`;
   return token;
 }
 
 /**
- * Resolve and consume a download grant (spec 5.3). Single-use by
- * construction: the KV entry is deleted the instant it's read and validated,
- * before the caller streams anything — Workers KV has no atomic
- * compare-and-swap, so read-then-delete (rather than a separate `used` flag,
- * which a delete makes redundant) is the tightest race window available to
- * prevent a concurrent replay from succeeding twice.
+ * Resolve and consume a download grant (spec 5.3). Single-use is enforced
+ * atomically in the database: UPDATE ... WHERE used_at IS NULL RETURNING
+ * lets exactly one request flip the row to used — a concurrent replay
+ * matches zero rows and is rejected, with no race window (unlike the KV
+ * get-then-delete this replaced).
  */
-export async function resolveDownloadGrant(cache: KVNamespace, token: string): Promise<DownloadGrant> {
-  const key = `download_auth:${token}`;
-  const cached = await cache.get(key);
-  if (!cached) throw new ApiError(403, 'unauthorized', 'Download token is invalid, expired, or already used');
-  await cache.delete(key);
-  return JSON.parse(cached) as DownloadGrant;
+export async function resolveDownloadGrant(sql: Sql, token: string): Promise<DownloadGrant> {
+  const tokenHash = await sha256Hex(token);
+  const rows = await sql<
+    Array<{ license_id: string; product_id: string; organization_id: string; version: string; package_path: string; installation_uuid: string | null }>
+  >`
+    UPDATE download_grants
+    SET used_at = NOW()
+    WHERE token_hash = ${tokenHash} AND used_at IS NULL AND expires_at > NOW()
+    RETURNING license_id, product_id, organization_id, version, package_path, installation_uuid`;
+  const row = rows[0];
+  if (!row) throw new ApiError(403, 'unauthorized', 'Download token is invalid, expired, or already used');
+  return {
+    license_id: row.license_id,
+    product_id: row.product_id,
+    version: row.version,
+    package_path: row.package_path,
+    org_id: row.organization_id,
+    installation_uuid: row.installation_uuid,
+  };
 }

@@ -14,6 +14,7 @@ function outboxRow(overrides: Record<string, unknown> = {}) {
     payload: { data: { license_id: 'lic-1', org_id: 'org-1', domain: 'example.com' } },
     attempts: 0,
     max_attempts: 3,
+    created_at: '2026-08-02T12:00:00.000Z',
     ...overrides,
   };
 }
@@ -81,5 +82,37 @@ describe('publishOutboxBatch', () => {
     const selectCall = mockSql.mock.calls[0][0].join('');
     expect(selectCall).toContain('processed_at IS NULL');
     expect(selectCall).toContain('attempts < max_attempts');
+  });
+
+  it('claims rows with FOR UPDATE SKIP LOCKED inside a transaction so concurrent crons cannot double-publish', async () => {
+    const mockSql: any = createMockSql();
+    mockSql.mockResolvedValueOnce([]);
+    await publishOutboxBatch(mockSql, mockQueue(async () => undefined), vi.fn());
+
+    expect(mockSql.begin).toHaveBeenCalledTimes(1);
+    const selectCall = mockSql.mock.calls[0][0].join('');
+    expect(selectCall).toContain('FOR UPDATE SKIP LOCKED');
+  });
+
+  it('derives a stable envelope id from the outbox row id so consumers can deduplicate retries', async () => {
+    const rowId = '3f9b2c1e-4d5f-4a9b-8c0d-1e2f3a4b5c6d';
+    const sendCalls: any[] = [];
+    const queue = mockQueue(async () => undefined);
+    (queue.send as any).mockImplementation(async (envelope: any) => {
+      sendCalls.push(envelope);
+    });
+
+    // Two separate publish runs over the same row (e.g. crash before commit,
+    // then redelivery) must produce the identical envelope id.
+    for (let i = 0; i < 2; i++) {
+      const mockSql: any = createMockSql();
+      mockSql.mockResolvedValueOnce([outboxRow({ id: rowId, created_at: '2026-08-02T00:00:00.000Z' })]);
+      mockSql.mockResolvedValueOnce([]);
+      await publishOutboxBatch(mockSql, queue, vi.fn());
+    }
+
+    expect(sendCalls[0].id).toBe('evt_3f9b2c1e4d5f4a9b8c0d1e2f3a4b5c6d');
+    expect(sendCalls[1].id).toBe(sendCalls[0].id);
+    expect(sendCalls[0].occurred_at).toBe('2026-08-02T00:00:00.000Z');
   });
 });

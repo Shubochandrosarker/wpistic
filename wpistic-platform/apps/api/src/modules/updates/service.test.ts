@@ -4,8 +4,9 @@
  * grant primitives (spec 5.5: replay, plan mismatch, concurrent download).
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createMockSql, createMockKV, testData } from '../../test/setup';
+import { createMockSql, testData } from '../../test/setup';
 import { UpdatesService, createDownloadGrant, resolveDownloadGrant } from './service';
+import { sha256Hex } from '../../utils/crypto';
 import { ApiError } from '../../errors';
 
 function packageRow(overrides: Record<string, unknown> = {}) {
@@ -133,39 +134,56 @@ describe('UpdatesService.findDownloadablePackage', () => {
   });
 });
 
-describe('download grant single-use semantics', () => {
-  let mockKV: KVNamespace;
+describe('download grant single-use semantics (database-backed)', () => {
+  let mockSql: any;
 
   beforeEach(() => {
-    mockKV = createMockKV();
+    mockSql = createMockSql();
   });
 
   const grant = { license_id: testData.uuids.license, product_id: testData.uuids.product, version: '2.1.0', package_path: 'p.zip', org_id: testData.uuids.org };
 
-  it('resolves a freshly issued grant exactly once', async () => {
-    const token = await createDownloadGrant(mockKV, grant, 900);
-    const resolved = await resolveDownloadGrant(mockKV, token);
+  const grantRow = {
+    license_id: testData.uuids.license,
+    product_id: testData.uuids.product,
+    organization_id: testData.uuids.org,
+    version: '2.1.0',
+    package_path: 'p.zip',
+    installation_uuid: null,
+  };
+
+  it('stores only the SHA-256 of the issued token, never the raw token', async () => {
+    mockSql.mockResolvedValueOnce([]);
+    const token = await createDownloadGrant(mockSql, grant, 900);
+
+    expect(token).toMatch(/^dl_[a-f0-9]{64}$/);
+    const insertParams = mockSql.mock.calls[0].slice(1);
+    expect(insertParams).toContain(await sha256Hex(token));
+    expect(insertParams).not.toContain(token);
+  });
+
+  it('resolves a grant the database consumed (row returned)', async () => {
+    mockSql.mockResolvedValueOnce([grantRow]);
+    const resolved = await resolveDownloadGrant(mockSql, 'dl_sometoken');
     expect(resolved.package_path).toBe('p.zip');
+    expect(resolved.org_id).toBe(testData.uuids.org);
   });
 
-  it('rejects a replayed token (already consumed)', async () => {
-    const token = await createDownloadGrant(mockKV, grant, 900);
-    await resolveDownloadGrant(mockKV, token);
-    await expect(resolveDownloadGrant(mockKV, token)).rejects.toThrow(ApiError);
+  it('rejects when the database matched no row (replayed, expired, or unknown token)', async () => {
+    mockSql.mockResolvedValueOnce([]);
+    await expect(resolveDownloadGrant(mockSql, 'dl_already-used')).rejects.toThrow(ApiError);
   });
 
-  it('blocks a second download once the first has fully resolved (concurrent download → only one succeeds)', async () => {
-    // Workers KV has no atomic compare-and-swap, so read-then-delete cannot
-    // guarantee mutual exclusion for two requests landing in the exact same
-    // tick — only that any request arriving after another has resolved is
-    // rejected. That is the guarantee this test proves.
-    const token = await createDownloadGrant(mockKV, grant, 900);
-    await resolveDownloadGrant(mockKV, token);
-    const second = await Promise.allSettled([resolveDownloadGrant(mockKV, token)]);
-    expect(second[0]!.status).toBe('rejected');
-  });
+  it('consumes atomically: a single UPDATE guarded by used_at IS NULL and expiry, with RETURNING', async () => {
+    // The atomicity guarantee lives in this query shape — exactly one
+    // concurrent request can flip used_at, everyone else matches no row.
+    mockSql.mockResolvedValueOnce([grantRow]);
+    await resolveDownloadGrant(mockSql, 'dl_token');
 
-  it('rejects an unknown token (unauthorized download)', async () => {
-    await expect(resolveDownloadGrant(mockKV, 'nonexistent-token')).rejects.toThrow(ApiError);
+    const query = mockSql.mock.calls[0][0].join('');
+    expect(query).toContain('UPDATE download_grants');
+    expect(query).toContain('used_at IS NULL');
+    expect(query).toContain('expires_at > NOW()');
+    expect(query).toContain('RETURNING');
   });
 });

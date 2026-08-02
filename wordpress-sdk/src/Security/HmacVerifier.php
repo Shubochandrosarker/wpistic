@@ -26,11 +26,17 @@ class HmacVerifier {
     }
 
     /**
-     * Canonical JSON: sorted keys, no whitespace
+     * Canonical JSON: sorted keys, no whitespace.
+     *
+     * Must produce byte-identical output to canonicalJson() in
+     * wpistic-platform/apps/api/src/utils/crypto.ts: null values are KEPT
+     * (they appear on the wire and JSON.stringify keeps them), and scalars
+     * are encoded without escaping slashes or unicode (JSON.stringify does
+     * neither). The shared golden vector test on both sides pins this.
      */
     private static function canonicalJson($value): string {
         if ($value === null || !is_object($value) && !is_array($value)) {
-            return json_encode($value);
+            return json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         }
 
         if (is_object($value)) {
@@ -49,18 +55,16 @@ class HmacVerifier {
                 return '[' . implode(',', $items) . ']';
             } else {
                 // It's an object
-                ksort($value);
+                ksort($value, SORT_STRING);
                 $items = [];
                 foreach ($value as $k => $v) {
-                    if ($v !== null) {
-                        $items[] = json_encode($k) . ':' . self::canonicalJson($v);
-                    }
+                    $items[] = json_encode((string) $k, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ':' . self::canonicalJson($v);
                 }
                 return '{' . implode(',', $items) . '}';
             }
         }
 
-        return json_encode($value);
+        return json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
 
     /**

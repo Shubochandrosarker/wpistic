@@ -117,7 +117,8 @@ $seoistic->api()->post( '/api/v1/usage/events', array(
   endpoint that turns that generic account session into a
   product-specific WPistic `activation_token` (org + license selection).
   The manual license-key field remains the reliable activation path.
-- `UpdateClient`'s download-authorize call requires the *raw* license key
-  in its request body, which this SDK correctly never stores after
-  activation — see `UpdateClient`'s class docblock for the exact tension
-  and the `wpistic_{slug}_license_key_for_download` filter it exposes.
+- `UpdateClient`'s download-authorize call authenticates with the
+  activation token alone (`{activation_token, product_slug,
+  requested_version}`) — the API does not ask for the raw license key,
+  which this SDK never stores after activation, so unattended background
+  updates work end-to-end.
