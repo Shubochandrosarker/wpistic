@@ -28,6 +28,11 @@ async function membershipRole(c: Context<AppContext>, userId: string, orgId: str
 export const injectOrgContext: MiddlewareHandler<AppContext> = async (c, next) => {
   if (c.req.method === 'OPTIONS' || !c.get('user')) return next();
 
+  // Admin routes operate across organizations by design (requireAdmin + explicit
+  // org ids in their own queries) — they are never "is this caller a member of
+  // this org", so the customer-membership check below doesn't apply to them.
+  if (c.req.path.startsWith('/api/v1/admin')) return next();
+
   const paramOrgId = c.req.param('orgId');
   const headerOrgId = c.req.header('X-Organization-Id');
   const requested = paramOrgId ?? headerOrgId ?? c.get('tokenOrgId') ?? null;
@@ -46,6 +51,20 @@ export const injectOrgContext: MiddlewareHandler<AppContext> = async (c, next) =
     }
     c.set('orgId', requested);
     c.set('orgRole', 'member');
+    await setOrgRlsContext(c, requested);
+    return next();
+  }
+
+  // Impersonation tokens (POST /admin/impersonate) are minted for exactly one
+  // org and carry a fixed, restricted org_role claim — the impersonating admin
+  // has no real organization_memberships row in the customer's org, so the DB
+  // lookup below must be skipped in favor of binding strictly to that org.
+  if (c.get('impersonation')) {
+    if (requested !== c.get('tokenOrgId')) {
+      throw ApiError.forbidden('Impersonation session does not grant access to this organization');
+    }
+    c.set('orgId', requested);
+    c.set('orgRole', c.get('orgRole') ?? 'admin');
     await setOrgRlsContext(c, requested);
     return next();
   }

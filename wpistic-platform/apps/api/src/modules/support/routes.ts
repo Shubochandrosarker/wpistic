@@ -31,11 +31,21 @@ supportRoutes.post('/', zValidator('json', createTicketSchema), async (c) => {
     ? await sql<{ id: string }[]>`SELECT id FROM products WHERE slug = ${body.product} LIMIT 1`
     : [];
 
+  // website_id/license_id are client-supplied — verify they actually belong to
+  // this org before attaching them, so a ticket can't reference another org's
+  // resources (broken tenant isolation).
+  const websiteId = body.website_id
+    ? (await sql<{ id: string }[]>`SELECT id FROM websites WHERE id = ${body.website_id} AND organization_id = ${orgId} LIMIT 1`)[0]?.id ?? null
+    : null;
+  const licenseId = body.license_id
+    ? (await sql<{ id: string }[]>`SELECT id FROM licenses WHERE id = ${body.license_id} AND organization_id = ${orgId} LIMIT 1`)[0]?.id ?? null
+    : null;
+
   const rows = await sql<{ id: string }[]>`
     INSERT INTO support_tickets (organization_id, user_id, product_id, website_id, license_id,
                                  subject, body, severity, category, environment_details)
-    VALUES (${orgId}, ${user.id}, ${products[0]?.id ?? null}, ${body.website_id ?? null},
-            ${body.license_id ?? null}, ${body.subject}, ${body.body}, ${body.severity},
+    VALUES (${orgId}, ${user.id}, ${products[0]?.id ?? null}, ${websiteId},
+            ${licenseId}, ${body.subject}, ${body.body}, ${body.severity},
             ${body.category ?? null}, ${sql.json((body.environment_details ?? {}) as never)})
     RETURNING id`;
   const ticketId = rows[0]!.id;

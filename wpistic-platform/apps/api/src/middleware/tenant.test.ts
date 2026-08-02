@@ -13,11 +13,14 @@ const ORG_B = '99999999-9999-9999-9999-999999999999';
 
 function makeContext(overrides: {
   method?: string;
+  path?: string;
   paramOrgId?: string;
   headerOrgId?: string;
   user?: { id: string; email: string } | undefined;
   authKind?: string;
   tokenOrgId?: string | null;
+  impersonation?: boolean;
+  orgRole?: string;
   sql?: any;
   kv?: KVNamespace;
 }) {
@@ -25,11 +28,14 @@ function makeContext(overrides: {
     user: overrides.user,
     authKind: overrides.authKind,
     tokenOrgId: overrides.tokenOrgId ?? null,
+    impersonation: overrides.impersonation,
+    orgRole: overrides.orgRole,
     sql: overrides.sql,
   };
   return {
     req: {
       method: overrides.method ?? 'GET',
+      path: overrides.path ?? '/api/v1/organizations/x',
       param: (key: string) => (key === 'orgId' ? overrides.paramOrgId : undefined),
       header: (key: string) => (key === 'X-Organization-Id' ? overrides.headerOrgId : undefined),
     },
@@ -117,6 +123,51 @@ describe('injectOrgContext', () => {
     expect(c.get('orgId')).toBe(ORG_A);
     expect(next).toHaveBeenCalled();
     expect(mockSql.mock.calls[0]).toContain(ORG_A);
+  });
+
+  it('admin routes skip customer-membership resolution entirely', async () => {
+    const c = makeContext({
+      user: { id: 'staff1', email: 'staff@wpistic.com' },
+      path: '/api/v1/admin/licenses',
+      paramOrgId: ORG_A, // even if present, must not trigger a membership lookup
+      sql: createMockSql(),
+      kv: createMockKV(),
+    });
+    const next = vi.fn();
+    await injectOrgContext(c, next);
+    expect(next).toHaveBeenCalled();
+    expect(c.get('orgId')).toBeUndefined();
+  });
+
+  it('an impersonation token binds strictly to its own org and sets RLS context', async () => {
+    const mockSql: any = createMockSql();
+    mockSql.mockResolvedValueOnce([]); // set_config call
+    const c = makeContext({
+      user: { id: 'staff1', email: 'staff@wpistic.com' },
+      impersonation: true,
+      tokenOrgId: ORG_A,
+      paramOrgId: ORG_A,
+      sql: mockSql,
+      kv: createMockKV(),
+    });
+    const next = vi.fn();
+    await injectOrgContext(c, next);
+    expect(c.get('orgId')).toBe(ORG_A);
+    expect(c.get('orgRole')).toBe('admin');
+    expect(next).toHaveBeenCalled();
+    expect(mockSql.mock.calls[0]).toContain(ORG_A);
+  });
+
+  it('an impersonation token cannot be redirected to a different org', async () => {
+    const c = makeContext({
+      user: { id: 'staff1', email: 'staff@wpistic.com' },
+      impersonation: true,
+      tokenOrgId: ORG_A,
+      paramOrgId: ORG_B,
+      sql: createMockSql(),
+      kv: createMockKV(),
+    });
+    await expect(injectOrgContext(c, vi.fn())).rejects.toThrow(/does not grant access/i);
   });
 });
 
