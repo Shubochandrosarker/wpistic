@@ -2,16 +2,15 @@
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
          bootstrap="tests/phpunit/bootstrap.php"
-         colors="true"
-         cacheDirectory=".phpunit.cache">
+         colors="true">
     <testsuites>
         <testsuite name="unit">
             <directory>tests/phpunit</directory>
         </testsuite>
     </testsuites>
-    <source>
+    <coverage cacheDirectory=".phpunit.cache">
         <include>
             <directory suffix=".php">src</directory>
         </include>
-    </source>
+    </coverage>
 </phpunit>
