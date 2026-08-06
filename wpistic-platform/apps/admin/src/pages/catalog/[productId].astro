@@ -1,0 +1,40 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import ProductEditor, { type Feature, type Plan, type Product } from '../../components/ProductEditor.tsx';
+import { adminContext, adminGet } from '../../lib/api';
+
+const { productId } = Astro.params;
+
+let data: { product: Product; plans: Plan[]; features: Feature[] } | null = null;
+let loadError: string | null = null;
+try {
+  data = await adminGet(adminContext(Astro), `/catalog/products/${productId}`);
+} catch (err) {
+  loadError = err instanceof Error ? err.message : 'Could not load this product';
+}
+---
+
+<AdminLayout title={data ? data.product.name : 'Product'} active="catalog">
+  <div class="mb-6">
+    <a href="/catalog" class="text-xs text-muted hover:text-white">← Catalog</a>
+    <h1 class="text-xl font-semibold tracking-tight mt-1">{data ? data.product.name : 'Product'}</h1>
+    {
+      data && (
+        <p class="text-sm text-muted mt-1">
+          <code class="font-mono">{data.product.slug}</code> · {data.product.type} · {data.product.catalog_state}
+        </p>
+      )
+    }
+  </div>
+  {loadError && <p class="text-sm text-red-300">{loadError}</p>}
+  {
+    data && (
+      <ProductEditor
+        client:load
+        product={data.product}
+        plans={data.plans}
+        features={data.features}
+      />
+    )
+  }
+</AdminLayout>

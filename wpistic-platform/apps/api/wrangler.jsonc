@@ -43,7 +43,14 @@
     "PUBLIC_ADMIN_URL": "https://admin.wpistic.com",
     "BILLING_MODE": "FREE_ONLY",
     "STRIPE_PUBLISHABLE_KEY": "",
-    "ADMIN_EMAILS": ""
+    // Comma-separated staff allowlist. Empty means nobody can reach /admin.
+    "ADMIN_EMAILS": "",
+    // Staff role ladder, "email=role" pairs. Roles, least to most privileged:
+    //   support_agent  (default) — read + license suspend/reactivate + impersonate
+    //   billing_admin            — + license issue/plan change/seats/expiry/transfer
+    //   platform_admin           — + catalog, organizations, grants, members, users
+    //   super_admin              — everything
+    "ADMIN_ROLES": ""
   },
   // Secrets (set via `wrangler secret put <NAME>` — add `--env staging` for staging):
   //   STRIPE_SECRET_KEY       — Stripe API key (test-mode key on staging)
@@ -106,7 +113,8 @@
         "PUBLIC_ADMIN_URL": "https://admin-staging.wpistic.com",
         "BILLING_MODE": "FREE_ONLY",
         "STRIPE_PUBLISHABLE_KEY": "",
-        "ADMIN_EMAILS": ""
+        "ADMIN_EMAILS": "",
+        "ADMIN_ROLES": ""
       }
     }
   }

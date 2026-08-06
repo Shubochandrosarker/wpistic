@@ -33,11 +33,12 @@ const rows = data.licenses.map((l) => ({
   <div class="mb-6">
     <h1 class="text-xl font-semibold tracking-tight">Licenses</h1>
     <p class="text-sm text-muted mt-1">
-      Search by key prefix, mask, organization, or activated domain. Actions are audited with your reason.
+      Search by key prefix, mask, organization, or activated domain. Click a key to change its plan, seats, or expiry. Actions are audited with your reason.
     </p>
   </div>
   <DataTable
     client:load
+    rowHref="/licenses/{id}"
     columns={[
       { key: 'key', label: 'Key', mono: true },
       { key: 'product', label: 'Product' },

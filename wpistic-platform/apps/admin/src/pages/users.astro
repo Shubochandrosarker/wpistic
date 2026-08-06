@@ -1,0 +1,18 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+import UserManager, { type AdminUser } from '../components/UserManager.tsx';
+import { adminContext, adminGet } from '../lib/api';
+
+const data = await adminGet<{ users: AdminUser[] }>(adminContext(Astro), '/tenancy/users?limit=200');
+---
+
+<AdminLayout title="Users" active="users">
+  <div class="mb-6">
+    <h1 class="text-xl font-semibold tracking-tight">Users</h1>
+    <p class="text-sm text-muted mt-1">
+      Individual accounts across every organization. Verify identity through a trusted channel before resetting MFA
+      or issuing a password link — both hand over account access.
+    </p>
+  </div>
+  <UserManager client:load users={data.users} />
+</AdminLayout>

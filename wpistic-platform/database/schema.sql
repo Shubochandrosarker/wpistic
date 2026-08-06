@@ -1103,6 +1103,14 @@ CREATE TABLE IF NOT EXISTS configuration_versions (
 
 -- The old seed contained two historical products not in the canonical launch
 -- catalog. Keep their rows for compatibility but prevent public acquisition.
+--
+-- These updates only matter for a database that was already seeded before this
+-- migration ran. On a fresh database `migrate.js up` runs every migration
+-- before the first seed file, so the products below do not exist yet and these
+-- statements match zero rows — which is why the same corrections are repeated,
+-- authoritatively, at the end of seeds/003_catalog_free_launch.sql. Do not
+-- remove either copy: this one fixes existing installs, that one fixes new
+-- ones.
 UPDATE products
 SET catalog_state = 'retired', acquisition_mode = 'paid', public_visibility = FALSE
 WHERE slug IN ('tripistic', 'wpagentistic');

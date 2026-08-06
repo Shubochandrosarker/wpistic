@@ -124,15 +124,28 @@ export class LicenseService {
   // Issuance
   // -------------------------------------------------------------------------
 
-  async issue(input: {
-    organizationId: string;
-    productId: string;
-    planId: string;
-    subscriptionId?: string | null;
-    maxActivations?: number;
-    expiresAt?: Date | null;
-  }): Promise<{ licenseId: string; rawKey: string; mask: string }> {
-    const products = await this.sql<{ slug: string }[]>`
+  /**
+   * Mint a license and return its raw key exactly once.
+   *
+   * `tx` lets a caller fold issuance into a transaction it already owns — the
+   * free-product claim does this so a customer can never end up with an access
+   * grant but no key. When it is supplied this method does NOT open its own
+   * transaction: the caller's commit is what makes the license real.
+   */
+  async issue(
+    input: {
+      organizationId: string;
+      productId: string;
+      planId: string;
+      subscriptionId?: string | null;
+      maxActivations?: number;
+      expiresAt?: Date | null;
+      actor?: Actor;
+    },
+    tx?: TransactionSql
+  ): Promise<{ licenseId: string; rawKey: string; mask: string }> {
+    const reader = tx ?? this.sql;
+    const products = await reader<{ slug: string }[]>`
       SELECT slug FROM products WHERE id = ${input.productId} LIMIT 1`;
     const product = products[0];
     if (!product) throw ApiError.notFound('Product');
@@ -140,7 +153,7 @@ export class LicenseService {
     // Activation limit defaults to the plan's `<product>.sites.max` entitlement.
     let maxActivations = input.maxActivations ?? 1;
     if (input.maxActivations === undefined) {
-      const limits = await this.sql<{ value: number }[]>`
+      const limits = await reader<{ value: number }[]>`
         SELECT pe.value::int AS value
         FROM plan_entitlements pe
         JOIN features f ON f.id = pe.feature_id
@@ -151,30 +164,32 @@ export class LicenseService {
 
     const { key, prefix, mask } = generateLicenseKey(product.slug);
     const keyHash = await sha256Hex(key);
-    const licenseId = await this.sql.begin(async (tx) => {
-      const rows = await tx<{ id: string }[]>`
+
+    const write = async (scope: TransactionSql): Promise<string> => {
+      const rows = await scope<{ id: string }[]>`
         INSERT INTO licenses (organization_id, product_id, plan_id, subscription_id, key_hash, key_prefix, key_mask,
                               max_activations, expires_at)
         VALUES (${input.organizationId}, ${input.productId}, ${input.planId}, ${input.subscriptionId ?? null},
                 ${keyHash}, ${prefix}, ${mask}, ${maxActivations}, ${input.expiresAt ?? null})
         RETURNING id`;
       const id = rows[0]!.id;
-      await this.logEvent(tx, {
+      await this.logEvent(scope, {
         licenseId: id,
         organizationId: input.organizationId,
         eventType: 'issued',
-        actor: { type: 'webhook' },
+        actor: input.actor ?? { type: 'webhook' },
         meta: { product_id: input.productId, plan_id: input.planId },
       });
       await writeOutboxEvent<Extract<DomainEvent, { type: 'license.issued' }>>(
-        tx,
+        scope,
         'license.issued',
         { license_id: id, org_id: input.organizationId, product_id: input.productId },
         input.organizationId
       );
       return id;
-    });
+    };
 
+    const licenseId = tx ? await write(tx) : await this.sql.begin(write);
     return { licenseId, rawKey: key, mask };
   }
 

@@ -86,6 +86,9 @@ PUBLIC_ADMIN_URL=http://localhost:4321
 BILLING_MODE=FREE_ONLY
 DASHBOARD_URL=http://localhost:5173
 ADMIN_EMAILS=owner@wpistic.local,staff@wpistic.local
+# Staff role ladder: support_agent < billing_admin < platform_admin < super_admin.
+# Unlisted allowlisted staff default to support_agent.
+ADMIN_ROLES=owner@wpistic.local=super_admin,staff@wpistic.local=support_agent
 ALLOW_LEGACY_ADMIN_TOKEN=true
 
 # --- frontend build-time vars ----------------------------------------------

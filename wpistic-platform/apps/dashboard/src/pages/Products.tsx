@@ -1,12 +1,30 @@
+import { useState } from 'react';
 import { Package } from 'lucide-react';
 import { useCatalog, useClaimFreeProduct, useOrgProducts } from '../hooks/useApi';
-import { Button, Card, EmptyState, PageHeader, Skeleton } from '../components/ui';
+import { Button, Card, EmptyState, Modal, PageHeader, Skeleton } from '../components/ui';
 import { ProductCard, type OwnedProduct } from '../components/ProductCard';
 
 export function Products() {
   const owned = useOrgProducts();
   const catalog = useCatalog();
   const claim = useClaimFreeProduct();
+
+  // A claimed plugin's license key comes back exactly once — only its hash is
+  // stored server-side. Hold it in a modal the customer has to dismiss rather
+  // than letting a re-render drop it on the floor.
+  const [issuedKey, setIssuedKey] = useState<{ product: string; key: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const claimProduct = (slug: string, name: string) => {
+    claim.mutate(slug, {
+      onSuccess: (result) => {
+        if (result.license) {
+          setCopied(false);
+          setIssuedKey({ product: name, key: result.license.license_key });
+        }
+      },
+    });
+  };
 
   const ownedSlugs = new Set((owned.data?.products ?? []).map((p) => p.slug));
   const discover = (catalog.data?.products ?? []).filter((p) => !ownedSlugs.has(p.slug));
@@ -64,7 +82,7 @@ export function Products() {
                     size="sm"
                     className="w-full"
                     disabled={claim.isPending}
-                    onClick={() => claim.mutate(p.slug)}
+                    onClick={() => claimProduct(p.slug, p.name)}
                   >
                     {claim.isPending ? 'Claiming…' : 'Claim free access'}
                   </Button>
@@ -80,6 +98,33 @@ export function Products() {
           </div>
         </section>
       )}
+
+      <Modal
+        open={issuedKey !== null}
+        onClose={() => setIssuedKey(null)}
+        title={`Your ${issuedKey?.product ?? ''} license key`}
+        footer={
+          <Button variant="secondary" onClick={() => setIssuedKey(null)} disabled={!copied}>
+            I've saved it
+          </Button>
+        }
+      >
+        <p className="text-[13px] text-muted mb-3">
+          Paste this into the plugin's settings screen to activate it. This is the only time it is shown — we store
+          only a hash of it, so it cannot be recovered later. If you lose it, rotate the key from the Licenses page.
+        </p>
+        <code className="block font-mono text-[13px] bg-surface-hover border border-border rounded-lg px-3 py-2 break-all mb-3">
+          {issuedKey?.key}
+        </code>
+        <Button
+          size="sm"
+          onClick={() => {
+            if (issuedKey) void navigator.clipboard.writeText(issuedKey.key).then(() => setCopied(true));
+          }}
+        >
+          {copied ? 'Copied' : 'Copy key'}
+        </Button>
+      </Modal>
     </div>
   );
 }
