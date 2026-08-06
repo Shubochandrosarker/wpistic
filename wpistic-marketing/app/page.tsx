@@ -79,7 +79,7 @@ export default function HomePage() {
                   <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
                   <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
                   <span className="h-2.5 w-2.5 rounded-full bg-green-400" />
-                  <span className="ml-3 text-xs font-medium text-ink-400">app.wpistic.com/dashboard</span>
+                  <span className="ml-3 text-xs font-medium text-ink-400">app.wpistic.com</span>
                 </div>
                 <div className="grid grid-cols-2 gap-3 p-5">
                   {[

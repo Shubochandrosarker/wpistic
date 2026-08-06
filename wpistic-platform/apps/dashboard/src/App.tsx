@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { Layout } from './components/Layout';
 import { Skeleton } from './components/ui';
@@ -16,6 +16,7 @@ import { Settings } from './pages/Settings';
 import { AuthCallback } from './pages/AuthCallback';
 import { AcceptInvitation } from './pages/AcceptInvitation';
 import { Impersonate } from './pages/Impersonate';
+import { LoginRedirect, NotFound, RegisterRedirect } from './pages/Routing';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -54,6 +55,18 @@ export function App() {
         <Routes>
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/auth/impersonate" element={<Impersonate />} />
+
+          {/*
+            Public entry points. These exist because other properties link to
+            them: the marketing site's sign-in and sign-up buttons, and old
+            links written against the `/dashboard` prefix this app never had.
+            They must sit outside <Protected>, or /login would bounce a
+            signed-out visitor into a redirect loop.
+          */}
+          <Route path="/login" element={<LoginRedirect />} />
+          <Route path="/register" element={<RegisterRedirect />} />
+          <Route path="/dashboard" element={<Navigate to="/" replace />} />
+          <Route path="/dashboard/*" element={<Navigate to="/" replace />} />
           <Route
             element={
               <Protected>
@@ -70,6 +83,13 @@ export function App() {
             <Route path="/security" element={<Security />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/invitations/accept" element={<AcceptInvitation />} />
+            {/*
+              Catch-all, inside the layout so an unknown path still renders the
+              shell and an escape route rather than a blank page. Static routes
+              above always win — React Router ranks by specificity, not by
+              declaration order.
+            */}
+            <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
       </BrowserRouter>

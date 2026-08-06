@@ -46,9 +46,10 @@ export default function RegisterPage() {
               Create your WPistic account
             </h1>
             <p className="mt-4 text-[15px] leading-relaxed text-ink-600">
-              Accounts are created on your {site.name} dashboard at{" "}
-              <span className="font-semibold text-ink-800">app.wpistic.com</span>, not on this
-              marketing site. Continue there to finish signing up in under a minute.
+              Accounts are created on the {site.name} sign-up page at{" "}
+              <span className="font-semibold text-ink-800">account.wpistic.com</span>, not on this
+              marketing site. Continue there to finish signing up in under a minute — you'll land
+              in your dashboard straight afterwards.
             </p>
 
             <div className="mt-8 grid gap-4">
@@ -80,7 +81,7 @@ export default function RegisterPage() {
 
             <p className="mt-3 flex items-start gap-1.5 text-[12.5px] leading-relaxed text-ink-500">
               <Icon name="lock" size={14} className="mt-0.5 shrink-0 text-ink-400" />
-              Account creation happens on your WPistic dashboard — the button below takes you
+              Account creation happens on the WPistic sign-up page — the button below takes you
               there. Nothing on this page is submitted or stored.
             </p>
 
