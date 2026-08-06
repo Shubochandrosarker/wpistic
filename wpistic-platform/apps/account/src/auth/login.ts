@@ -1,7 +1,7 @@
 /**
  * Login: password + optional TOTP/recovery-code MFA in one call.
- * Failed attempts are rate-limited per IP via KV (10/15min) and recorded
- * as security events. New-device logins emit a security alert event.
+ * Failed attempts are rate-limited per IP (10/15min) and recorded as security
+ * events. New-device logins emit a security alert event.
  */
 import type { Context } from 'hono';
 import type { LoginInput } from '@wpistic/types';
@@ -14,16 +14,36 @@ import { findUserByEmail, listUserOrganizations, recordSecurityEvent, touchLogin
 const MAX_ATTEMPTS = 10;
 const WINDOW_SECONDS = 15 * 60;
 
-async function tooManyAttempts(c: Context<AppContext>, ip: string): Promise<boolean> {
-  const key = `login-fail:${ip}`;
-  const count = parseInt((await c.env.PKCE_STORAGE.get(key)) ?? '0', 10);
-  return count >= MAX_ATTEMPTS;
+/**
+ * Failed-attempt counting is a single atomic statement in Postgres.
+ *
+ * It used to be a KV read, a parseInt, and a write. Under the concurrent
+ * guessing this limiter exists to stop, every request read the same value
+ * before any write landed, so ten parallel attempts recorded one failure. The
+ * INSERT ... ON CONFLICT DO UPDATE below serializes on the row lock, so N
+ * concurrent attempts produce N distinct counts.
+ *
+ * Reads and writes share the counter: `peek` looks without incrementing so a
+ * legitimate user who is already locked out is rejected before their password
+ * is checked, and `record` increments only on an actual failure.
+ */
+async function peekFailedAttempts(c: Context<AppContext>, ip: string): Promise<number> {
+  const windowStart = currentWindowStart();
+  const rows = await c.get('sql')<{ count: number }[]>`
+    SELECT count FROM rate_limit_counters
+    WHERE bucket = ${`login-fail:${ip}`} AND window_start = ${windowStart}
+    LIMIT 1`;
+  return rows[0]?.count ?? 0;
 }
 
-async function bumpFailedAttempts(c: Context<AppContext>, ip: string): Promise<void> {
-  const key = `login-fail:${ip}`;
-  const count = parseInt((await c.env.PKCE_STORAGE.get(key)) ?? '0', 10);
-  await c.env.PKCE_STORAGE.put(key, String(count + 1), { expirationTtl: WINDOW_SECONDS });
+async function recordFailedAttempt(c: Context<AppContext>, ip: string): Promise<void> {
+  await c.get('sql')`
+    SELECT rate_limit_bump(${`login-fail:${ip}`}, ${currentWindowStart()}, ${WINDOW_SECONDS * 2})`;
+}
+
+function currentWindowStart(): Date {
+  const windowMs = WINDOW_SECONDS * 1000;
+  return new Date(Math.floor(Date.now() / windowMs) * windowMs);
 }
 
 export async function handleLogin(c: Context<AppContext>, input: LoginInput) {
@@ -31,7 +51,7 @@ export async function handleLogin(c: Context<AppContext>, input: LoginInput) {
   const ip = getClientIp(c);
   const userAgent = c.req.header('User-Agent') ?? null;
 
-  if (await tooManyAttempts(c, ip)) {
+  if ((await peekFailedAttempts(c, ip)) >= MAX_ATTEMPTS) {
     return c.json(
       { error: { code: 'rate_limited', message: 'Too many failed attempts. Try again in a few minutes.' } },
       429
@@ -39,12 +59,14 @@ export async function handleLogin(c: Context<AppContext>, input: LoginInput) {
   }
 
   const user = await findUserByEmail(sql, input.email);
-  const invalid = () => {
-    c.executionCtx.waitUntil(bumpFailedAttempts(c, ip));
+  // Awaited, not fired into waitUntil: the count has to be durable before the
+  // rejection goes out, or a fast attacker outruns their own failure counter.
+  const invalid = async () => {
+    await recordFailedAttempt(c, ip);
     return c.json({ error: { code: 'invalid_credentials', message: 'Invalid email or password' } }, 401);
   };
 
-  if (!user || user.status !== 'active') return invalid();
+  if (!user || user.status !== 'active') return await invalid();
   if (!(await verifyPassword(input.password, user.password_hash))) {
     await recordSecurityEvent(sql, {
       userId: user.id,
@@ -53,7 +75,7 @@ export async function handleLogin(c: Context<AppContext>, input: LoginInput) {
       ipAddress: ip,
       userAgent,
     });
-    return invalid();
+    return await invalid();
   }
 
   // MFA gate — TOTP first, then single-use recovery codes.
@@ -67,8 +89,14 @@ export async function handleLogin(c: Context<AppContext>, input: LoginInput) {
       mfaOk = verifyTotp(secret, input.mfa_code.replace(/\s/g, ''));
     }
     if (!mfaOk) {
+      // Bounded on purpose: each row costs a bcrypt comparison, and bcrypt is
+      // deliberately slow. Enrolment issues 10 codes, so the limit is headroom
+      // rather than a constraint — but without it a malformed account with
+      // hundreds of unused codes would turn one wrong digit into a CPU stall.
       const codes = await sql<{ id: string; code_hash: string }[]>`
-        SELECT id, code_hash FROM mfa_recovery_codes WHERE user_id = ${user.id} AND used_at IS NULL`;
+        SELECT id, code_hash FROM mfa_recovery_codes
+        WHERE user_id = ${user.id} AND used_at IS NULL
+        ORDER BY created_at LIMIT 20`;
       for (const row of codes) {
         if (await bcrypt.compare(input.mfa_code.toUpperCase(), row.code_hash)) {
           await sql`UPDATE mfa_recovery_codes SET used_at = NOW() WHERE id = ${row.id}`;
@@ -85,7 +113,7 @@ export async function handleLogin(c: Context<AppContext>, input: LoginInput) {
       }
     }
     if (!mfaOk) {
-      c.executionCtx.waitUntil(bumpFailedAttempts(c, ip));
+      await recordFailedAttempt(c, ip);
       return c.json({ error: { code: 'mfa_invalid', message: 'Invalid MFA code' } }, 401);
     }
   }

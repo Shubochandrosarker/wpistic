@@ -2,13 +2,16 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "types": [
+      "node",
       "@cloudflare/workers-types"
-    ]
+    ],
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "noEmit": true
   },
   "include": [
-    "src"
-  ],
-  "exclude": [
-    "src/**/*.node.ts"
+    "src/**/*.ts"
   ]
 }

@@ -1,0 +1,117 @@
+# Self-hosted WPistic control plane, for a VPS fronted by a Cloudflare Tunnel.
+#
+#   cp .env.vps.example .env.vps      # then fill it in — see docs/VPS_DEPLOYMENT.md
+#   docker compose --env-file .env.vps -f docker-compose.vps.yml up -d --build
+#
+# ---------------------------------------------------------------------------
+# No service publishes a port to the host. That is deliberate, and it is a
+# security control rather than tidiness.
+#
+# The API resolves a caller's IP from `CF-Connecting-IP`, falling back to
+# `X-Forwarded-For`. On Cloudflare those headers are set by the edge and cannot
+# be forged. On a VPS, anything that can open a socket to the container can
+# send whatever it likes — so a directly reachable port would let a caller
+# spoof an IP, evade rate limiting, and poison another customer's bucket.
+#
+# Keeping every service on an internal Docker network means the only path in is
+# `cloudflared`, which is what makes those headers trustworthy again. If you
+# publish a port for debugging, bind it to 127.0.0.1, never 0.0.0.0.
+# ---------------------------------------------------------------------------
+name: wpistic
+
+x-app: &app
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.node
+  image: wpistic-platform:latest
+  env_file: .env.vps
+  restart: unless-stopped
+  networks: [wpistic]
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: wpistic-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks: [wpistic]
+
+  # Applies migrations, then seeds, then exits. Everything else waits for it to
+  # succeed, so a failed migration stops the deploy instead of starting
+  # services against a schema they do not match.
+  migrate:
+    <<: *app
+    container_name: wpistic-migrate
+    command: ['migrate']
+    restart: 'no'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    container_name: wpistic-api
+    command: ['api']
+    volumes:
+      - blob-data:/var/lib/wpistic/blobs
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:8787/health || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  account:
+    <<: *app
+    container_name: wpistic-account
+    command: ['account']
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:8788/health || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # Replaces Cloudflare Cron Triggers: drains the transactional outbox,
+  # reconciles expired licenses, and sweeps stale cache and rate-limit rows.
+  # Run exactly one.
+  scheduler:
+    <<: *app
+    container_name: wpistic-scheduler
+    command: ['scheduler']
+    volumes:
+      - blob-data:/var/lib/wpistic/blobs
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  postgres-data:
+  # Plugin update packages. Include this in your backups — losing it means
+  # customers cannot download updates until every package is re-uploaded.
+  blob-data:
+
+networks:
+  wpistic:
+    # Attach your existing cloudflared container to this network so it can
+    # reach the services by name (http://api:8787, http://account:8788).
+    # If cloudflared runs on a different compose project, declare this network
+    # as `external: true` there and reference it by the name below.
+    name: wpistic
