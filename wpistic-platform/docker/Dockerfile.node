@@ -1,7 +1,7 @@
 # Self-hosted image for the WPistic control plane.
 #
-# One image, four roles, chosen by the command: `api`, `account`, `scheduler`,
-# `migrate`. Keeping them in one image means one build and one thing to keep
+# One image, six roles, chosen by the command: `api`, `account`, `dashboard`,
+# `admin`, `scheduler`, or `migrate`. Keeping them in one image means one build
 # patched, and the entry points are a few hundred kilobytes each.
 #
 # Two stages. The builder installs the full workspace and bundles each entry
@@ -11,7 +11,7 @@
 
 # ---------------------------------------------------------------------------
 FROM node:22-alpine AS builder
-WORKDIR /build
+WORKDIR /app
 
 # Manifests first: this layer only rebuilds when dependencies actually change,
 # so ordinary source edits reuse the cached install.
@@ -39,6 +39,10 @@ RUN npm --workspace @wpistic/api     run build:node \
 # web server for a directory of files.
 RUN npm --workspace @wpistic/dashboard run build
 
+# Build Astro with its standalone Node adapter. Cloudflare builds continue to
+# use the default adapter selected in astro.config.mjs.
+RUN ASTRO_ADAPTER=node npm --workspace @wpistic/admin run build
+
 # ---------------------------------------------------------------------------
 FROM node:22-alpine AS runtime
 WORKDIR /app
@@ -47,12 +51,20 @@ WORKDIR /app
 # graceful-shutdown path (drain waitUntil work, close the pool) actually runs.
 RUN apk add --no-cache curl tini
 
-COPY --from=builder /build/apps/api/dist-node/server.mjs        ./api/server.mjs
-COPY --from=builder /build/apps/api/dist-node/scheduler.mjs     ./api/scheduler.mjs
-COPY --from=builder /build/apps/account/dist-node/server.mjs    ./account/server.mjs
-COPY --from=builder /build/apps/dashboard/dist                  ./dashboard
-COPY --from=builder /build/database                             ./database
-COPY --from=builder /build/node_modules/postgres                ./node_modules/postgres
+COPY --from=builder /app/apps/api/dist-node/server.mjs          ./api/server.mjs
+COPY --from=builder /app/apps/api/dist-node/scheduler.mjs       ./api/scheduler.mjs
+COPY --from=builder /app/apps/account/dist-node/server.mjs      ./account/server.mjs
+COPY --from=builder /app/apps/dashboard/dist                    ./dashboard
+COPY --from=builder /app/apps/admin/dist                        ./admin
+COPY --from=builder /app/docker/static-server.mjs               ./dashboard-server.mjs
+COPY --from=builder /app/database                               ./database
+COPY --from=builder /app/node_modules/postgres                  ./node_modules/postgres
+# Astro's server bundle externalizes React. Copy only its pinned runtime
+# dependencies rather than the builder's complete dependency tree.
+COPY --from=builder /app/node_modules/astro                     ./node_modules/astro
+COPY --from=builder /app/node_modules/react                     ./node_modules/react
+COPY --from=builder /app/node_modules/react-dom                 ./node_modules/react-dom
+COPY --from=builder /app/node_modules/scheduler                 ./node_modules/scheduler
 COPY docker/entrypoint.node.sh                                  ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 

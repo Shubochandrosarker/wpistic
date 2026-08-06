@@ -18,7 +18,9 @@ function secure(response: Response, environment: 'staging' | 'production'): Resp
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const path = new URL(context.request.url).pathname;
-  const env = context.locals.runtime.env;
+  // Cloudflare supplies bindings through `locals.runtime.env`. The standalone
+  // Node adapter does not, so expose process.env through the same interface.
+  const env = context.locals.runtime?.env ?? process.env;
   if (PUBLIC_PATHS.has(path) || path.startsWith('/_')) return secure(await next(), env.ENVIRONMENT);
 
   const session = await resolveAdminSession(context.request, context.cookies, env);
