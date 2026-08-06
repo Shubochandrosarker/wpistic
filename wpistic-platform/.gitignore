@@ -9,10 +9,10 @@ build/
 .env
 .env.*
 !.env.example
+!.env.vps.example
 coverage/
 *.log
 .DS_Store
 
-# Self-hosted deployment configuration — contains live secrets.
-.env.vps
+# Bundled self-hosted entry points, produced by `npm run build:node`.
 dist-node/
