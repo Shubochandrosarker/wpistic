@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "api.wpistic.com \u2014 WPistic control plane API (modular monolith on Cloudflare Workers)",
+  "description": "api.wpistic.com — WPistic control plane API (modular monolith on Cloudflare Workers)",
   "scripts": {
     "build": "wrangler deploy --dry-run --outdir dist",
     "build:node": "esbuild src/server.node.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist-node/server.mjs --banner:js=\"import{createRequire}from'node:module';const require=createRequire(import.meta.url);\"",
@@ -15,7 +15,11 @@
     "test": "vitest",
     "test:coverage": "vitest --coverage",
     "typecheck": "tsc --noEmit",
-    "typecheck:node": "tsc --noEmit -p tsconfig.node.json"
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env production",
+    "dry-run:staging": "wrangler deploy --env staging --dry-run",
+    "dry-run:production": "wrangler deploy --env production --dry-run"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.4.1",
@@ -27,11 +31,11 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240925.0",
+    "@cloudflare/workers-types": "5.20260728.1",
     "@types/node": "^22.7.4",
     "@vitest/ui": "^1.6.0",
     "typescript": "^5.5.4",
     "vitest": "^1.6.0",
-    "wrangler": "^3.80.0"
+    "wrangler": "4.114.0"
   }
 }

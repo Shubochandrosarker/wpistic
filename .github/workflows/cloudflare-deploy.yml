@@ -1,0 +1,122 @@
+name: Cloudflare Workers deployment
+
+on:
+  pull_request:
+    paths:
+      - 'wpistic-marketing/**'
+      - 'wpistic-platform/**'
+      - 'scripts/cloudflare/**'
+      - '.github/workflows/cloudflare-deploy.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'wpistic-marketing/**'
+      - 'wpistic-platform/**'
+      - 'scripts/cloudflare/**'
+      - '.github/workflows/cloudflare-deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wpistic-platform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: wpistic-platform/package-lock.json
+      - run: npm ci
+      - run: npm run cloudflare:typecheck
+      - run: npm --workspace @wpistic/api run test -- --run
+      - run: npm --workspace @wpistic/platform-sdk run test
+      - run: npm --workspace @wpistic/dashboard run build:staging
+      - run: npm --workspace @wpistic/dashboard run build:production
+      - run: npm --workspace @wpistic/admin run build
+      - run: npm --workspace @wpistic/api run build
+      - run: npm ci
+        working-directory: wpistic-marketing
+      - run: npm run check:static
+        working-directory: wpistic-marketing
+      - run: node scripts/cloudflare/verify.mjs
+        working-directory: .
+      - run: node --check scripts/cloudflare/provision.mjs && node --check scripts/cloudflare/verify.mjs
+
+  dry-runs:
+    needs: verify
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wpistic-platform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: wpistic-platform/package-lock.json
+      - run: npm ci
+      - run: npm run cloudflare:dry-run:staging
+      - run: npm run cloudflare:dry-run:production
+
+  deploy-staging:
+    needs: [verify, dry-runs]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+    defaults:
+      run:
+        working-directory: wpistic-platform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: wpistic-platform/package-lock.json
+      - run: npm ci
+      - run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - run: npm run cloudflare:deploy:staging
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      - run: npm run cloudflare:smoke:staging
+
+  deploy-production:
+    needs: verify
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    defaults:
+      run:
+        working-directory: wpistic-platform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: wpistic-platform/package-lock.json
+      - run: test "$(git branch --show-current)" = "main" || test "${{ github.ref_name }}" = "main"
+      - run: npm ci
+      - run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - run: npm run cloudflare:deploy:production
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      - run: npm run cloudflare:smoke:production

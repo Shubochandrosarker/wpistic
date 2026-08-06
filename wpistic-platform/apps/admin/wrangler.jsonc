@@ -1,48 +1,68 @@
 {
-  "name": "wpistic-admin",
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "compatibility_date": "2026-08-06",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "main": "dist/_worker.js/index.js",
-  "compatibility_date": "2026-08-02",
-  "compatibility_flags": ["nodejs_compat"],
-  "routes": [{ "pattern": "admin.wpistic.com", "custom_domain": true }],
   "assets": {
     "directory": "dist",
     "binding": "ASSETS"
   },
-  "vars": {
-    "API_URL": "https://api.wpistic.com",
-    "DASHBOARD_URL": "https://app.wpistic.com",
-    "ACCOUNT_URL": "https://account.wpistic.com",
-    "PUBLIC_ACCOUNT_URL": "https://account.wpistic.com",
-    "ADMIN_CLIENT_ID": "wpistic_admin",
-    "ADMIN_REDIRECT_URI": "https://admin.wpistic.com/auth/callback"
-  },
   "env": {
     "staging": {
       "name": "wpistic-admin-staging",
-      "routes": [{ "pattern": "admin-staging.wpistic.com", "custom_domain": true }],
+      "routes": [
+        {
+          "pattern": "admin-staging.wpistic.com",
+          "custom_domain": true
+        }
+      ],
       "vars": {
+        "ENVIRONMENT": "staging",
         "API_URL": "https://api-staging.wpistic.com",
         "DASHBOARD_URL": "https://app-staging.wpistic.com",
         "ACCOUNT_URL": "https://account-staging.wpistic.com",
         "PUBLIC_ACCOUNT_URL": "https://account-staging.wpistic.com",
         "ADMIN_CLIENT_ID": "wpistic_admin",
         "ADMIN_REDIRECT_URI": "https://admin-staging.wpistic.com/auth/callback"
-      }
+      },
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1
+      },
+      "assets": {
+        "directory": "dist",
+        "binding": "ASSETS"
+      },
+      "workers_dev": false
     },
     "production": {
       "name": "wpistic-admin",
-      "routes": [{ "pattern": "admin.wpistic.com", "custom_domain": true }],
+      "routes": [
+        {
+          "pattern": "admin.wpistic.com",
+          "custom_domain": true
+        }
+      ],
       "vars": {
+        "ENVIRONMENT": "production",
         "API_URL": "https://api.wpistic.com",
         "DASHBOARD_URL": "https://app.wpistic.com",
         "ACCOUNT_URL": "https://account.wpistic.com",
         "PUBLIC_ACCOUNT_URL": "https://account.wpistic.com",
         "ADMIN_CLIENT_ID": "wpistic_admin",
         "ADMIN_REDIRECT_URI": "https://admin.wpistic.com/auth/callback"
-      }
+      },
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 0.25
+      },
+      "assets": {
+        "directory": "dist",
+        "binding": "ASSETS"
+      },
+      "workers_dev": false
     }
   }
-  // Secrets (set via `wrangler secret put <NAME>`):
-  // The admin worker uses OAuth staff JWTs issued by the account service.
-  // Protect the hostname with Cloudflare Access as an additional perimeter control.
 }

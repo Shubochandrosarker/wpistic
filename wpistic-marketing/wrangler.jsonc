@@ -1,0 +1,57 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "compatibility_date": "2026-08-06",
+  "main": "src/worker.ts",
+  "env": {
+    "staging": {
+      "name": "wpistic-marketing-staging",
+      "routes": [
+        {
+          "pattern": "www-staging.wpistic.com",
+          "custom_domain": true
+        }
+      ],
+      "assets": {
+        "directory": "./out",
+        "binding": "ASSETS",
+        "not_found_handling": "404-page"
+      },
+      "vars": {
+        "ENVIRONMENT": "staging",
+        "CANONICAL_HOST": "www-staging.wpistic.com"
+      },
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1
+      },
+      "workers_dev": false
+    },
+    "production": {
+      "name": "wpistic-marketing",
+      "routes": [
+        {
+          "pattern": "wpistic.com",
+          "custom_domain": true
+        },
+        {
+          "pattern": "www.wpistic.com",
+          "custom_domain": true
+        }
+      ],
+      "assets": {
+        "directory": "./out",
+        "binding": "ASSETS",
+        "not_found_handling": "404-page"
+      },
+      "vars": {
+        "ENVIRONMENT": "production",
+        "CANONICAL_HOST": "www.wpistic.com"
+      },
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 0.25
+      },
+      "workers_dev": false
+    }
+  }
+}

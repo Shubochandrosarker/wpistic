@@ -54,22 +54,22 @@ export const app = new Hono<AppContext>();
 // Middleware stack (order matters)
 // ---------------------------------------------------------------------------
 
+function allowedOrigins(environment: Env['ENVIRONMENT']): string[] {
+  const origins = environment === 'production'
+    ? ['https://www.wpistic.com', 'https://account.wpistic.com', 'https://api.wpistic.com', 'https://app.wpistic.com', 'https://admin.wpistic.com']
+    : ['https://www-staging.wpistic.com', 'https://account-staging.wpistic.com', 'https://api-staging.wpistic.com', 'https://app-staging.wpistic.com', 'https://admin-staging.wpistic.com'];
+  return [...origins, ...(environment === 'staging' ? ['http://localhost:5173', 'http://localhost:4321'] : [])];
+}
+
 app.use(
   '*',
   cors({
-    origin: [
-      'https://app.wpistic.com',
-      'https://admin.wpistic.com',
-      'https://app.chatbotistic.com',
-      'https://app.insightistic.com',
-      'https://app.tripistic.com',
-      'https://app.wpagentistic.com',
-      'http://localhost:5173',
-      'http://localhost:4321',
-    ],
+    origin: (origin, c) => allowedOrigins(c.env.ENVIRONMENT).includes(origin) ? origin : undefined,
     credentials: true,
+    allowMethods: ['GET', 'POST', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization', 'X-Idempotency-Key', 'X-Correlation-Id', 'X-Organization-Id'],
     exposeHeaders: ['X-Correlation-Id', 'X-RateLimit-Limit', 'X-RateLimit-Remaining'],
+    maxAge: 600,
   })
 );
 
@@ -77,8 +77,11 @@ app.use('*', correlationId);
 app.use('*', requestLogger);
 app.use('*', async (c, next) => {
   await next();
+  c.header('Cache-Control', 'no-store');
+  c.header('Pragma', 'no-cache');
+  c.header('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; form-action 'none'");
   c.header('X-Content-Type-Options', 'nosniff');
-  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  c.header('Referrer-Policy', 'no-referrer');
   c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
 });
 // Per-request DB client + event bus.

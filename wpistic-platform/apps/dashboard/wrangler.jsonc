@@ -1,9 +1,52 @@
 {
-  "name": "wpistic-dashboard",
-  "compatibility_date": "2026-08-02",
-  "routes": [{ "pattern": "app.wpistic.com", "custom_domain": true }],
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "compatibility_date": "2026-08-06",
   "assets": {
     "directory": "dist",
     "not_found_handling": "single-page-application"
+  },
+  "env": {
+    "staging": {
+      "name": "wpistic-dashboard-staging",
+      "routes": [
+        {
+          "pattern": "app-staging.wpistic.com",
+          "custom_domain": true
+        }
+      ],
+      "vars": {
+        "ENVIRONMENT": "staging"
+      },
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1
+      },
+      "assets": {
+        "directory": "dist",
+        "not_found_handling": "single-page-application"
+      },
+      "workers_dev": false
+    },
+    "production": {
+      "name": "wpistic-dashboard",
+      "routes": [
+        {
+          "pattern": "app.wpistic.com",
+          "custom_domain": true
+        }
+      ],
+      "vars": {
+        "ENVIRONMENT": "production"
+      },
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 0.25
+      },
+      "assets": {
+        "directory": "dist",
+        "not_found_handling": "single-page-application"
+      },
+      "workers_dev": false
+    }
   }
 }

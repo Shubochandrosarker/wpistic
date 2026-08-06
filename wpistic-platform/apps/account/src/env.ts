@@ -3,13 +3,14 @@ import type { Sql } from 'postgres';
 export interface Env {
   HYPERDRIVE: Hyperdrive;
   PKCE_STORAGE: KVNamespace;
+  ENVIRONMENT: 'staging' | 'production';
   ISSUER: string;
   COOKIE_DOMAIN: string;
   DEFAULT_REDIRECT: string;
   JWT_PRIVATE_KEY: string;
   JWT_PUBLIC_KEY: string;
   MFA_ENC_KEY: string;
-  EMAIL_WEBHOOK_URL?: string;
+  EMAIL_WEBHOOK_URL: string;
 }
 
 export interface SessionContext {

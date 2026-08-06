@@ -7,7 +7,13 @@
     "build": "next build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint",
-    "check:static": "npm run typecheck && npm run lint && npm run build && node scripts/check-static.mjs"
+    "check:static": "npm run typecheck && npm run lint && npm run build && node scripts/check-static.mjs",
+    "build:staging": "npm run build",
+    "build:production": "npm run build",
+    "deploy:staging": "npm run build:staging && wrangler deploy --env staging",
+    "deploy:production": "npm run build:production && wrangler deploy --env production",
+    "dry-run:staging": "npm run build:staging && wrangler deploy --env staging --dry-run",
+    "dry-run:production": "npm run build:production && wrangler deploy --env production --dry-run"
   },
   "dependencies": {
     "next": "16.2.10",
@@ -22,6 +28,8 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wrangler": "4.114.0",
+    "@cloudflare/workers-types": "5.20260728.1"
   }
 }

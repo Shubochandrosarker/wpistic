@@ -8,7 +8,11 @@
     "dev": "astro dev --port 4321",
     "build": "astro build",
     "deploy": "astro build && wrangler deploy",
-    "typecheck": "astro check"
+    "typecheck": "astro-check",
+    "deploy:staging": "npm run build && wrangler deploy --env staging",
+    "deploy:production": "npm run build && wrangler deploy --env production",
+    "dry-run:staging": "npm run build && wrangler deploy --env staging --dry-run",
+    "dry-run:production": "npm run build && wrangler deploy --env production --dry-run"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^11.1.0",
@@ -26,6 +30,6 @@
     "@wpistic/ui-design-system": "*",
     "tailwindcss": "^3.4.13",
     "typescript": "^5.5.4",
-    "wrangler": "^3.80.0"
+    "wrangler": "4.114.0"
   }
 }

@@ -18,15 +18,19 @@ export const requestLogger: MiddlewareHandler<AppContext> = async (c, next) => {
   const start = Date.now();
   await next();
   const line = {
+    timestamp: new Date().toISOString(),
     level: c.res.status >= 500 ? 'error' : 'info',
-    ts: new Date().toISOString(),
-    method: c.req.method,
-    path: c.req.path,
-    status: c.res.status,
-    ms: Date.now() - start,
+    service: 'wpistic-api',
+    environment: c.env.ENVIRONMENT,
+    request_id: c.get('correlationId'),
     correlation_id: c.get('correlationId'),
+    route: c.req.path,
+    status: c.res.status,
+    duration_ms: Date.now() - start,
+    error_code: c.res.status >= 400 ? 'http_error' : undefined,
     org_id: c.get('orgId') ?? c.get('tokenOrgId') ?? undefined,
     user_id: c.get('user')?.id,
+    worker_version: c.req.header('CF-Worker'),
     ray: c.req.header('CF-Ray'),
   };
   console.log(JSON.stringify(line));

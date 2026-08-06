@@ -1,0 +1,7 @@
+# Copy to .dev.vars for local development only. Never commit the filled file.
+LICENSE_SIGNING_SECRET=<random-32-byte-secret>
+LICENSE_JWT_PRIVATE_KEY=<generate-a-distinct-RS256-private-key>
+LICENSE_JWT_PUBLIC_KEY=<matching-RS256-public-key>
+JWT_PRIVATE_KEY=<account-token-re-signing-key>
+JWT_PUBLIC_KEY=<account-token-verification-key>
+MFA_ENC_KEY=<base64-encoded-32-byte-key>
