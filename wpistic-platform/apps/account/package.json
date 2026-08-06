@@ -3,15 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "account.wpistic.com — OAuth 2.1 / OIDC identity service on Cloudflare Workers",
+  "description": "account.wpistic.com \u2014 OAuth 2.1 / OIDC identity service on Cloudflare Workers",
   "scripts": {
-    "dev": "wrangler dev --port 8788",
+    "build:node": "esbuild src/server.node.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist-node/server.mjs --banner:js=\"import{createRequire}from'node:module';const require=createRequire(import.meta.url);\"",
     "deploy": "wrangler deploy",
-    "typecheck": "tsc --noEmit"
+    "dev": "wrangler dev --port 8788",
+    "serve:node": "node --experimental-strip-types src/server.node.ts",
+    "typecheck": "tsc --noEmit",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json"
   },
   "dependencies": {
-    "@wpistic/types": "*",
     "@hono/zod-validator": "^0.4.1",
+    "@wpistic/node-runtime": "*",
+    "@wpistic/types": "*",
     "bcryptjs": "^2.4.3",
     "hono": "^4.6.3",
     "jose": "^5.9.3",
@@ -22,6 +26,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240925.0",
     "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^22.7.4",
     "typescript": "^5.5.4",
     "wrangler": "^3.80.0"
   }

@@ -2,13 +2,12 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "types": [
+      "node",
       "@cloudflare/workers-types"
     ]
   },
   "include": [
-    "src"
-  ],
-  "exclude": [
-    "src/**/*.node.ts"
+    "src/**/*.node.ts",
+    "src/**/*.ts"
   ]
 }

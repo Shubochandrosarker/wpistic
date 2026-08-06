@@ -43,7 +43,12 @@ import { notificationRoutes } from './modules/notifications/routes';
 import { auditRoutes } from './modules/audit/routes';
 import { adminRoutes } from './modules/admin/routes';
 
-const app = new Hono<AppContext>();
+/**
+ * Exported so the self-hosted Node entry point (`server.node.ts`) can serve the
+ * identical app. `app.fetch(request, env, ctx)` takes its bindings as
+ * arguments, so the same routes run on Workers or on a VPS with no fork.
+ */
+export const app = new Hono<AppContext>();
 
 // ---------------------------------------------------------------------------
 // Middleware stack (order matters)
@@ -76,9 +81,12 @@ app.use('*', async (c, next) => {
   c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
   c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
 });
-app.use('*', rateLimiter);
-
 // Per-request DB client + event bus.
+//
+// This must precede the rate limiter: the limiter's counters live in Postgres
+// (a single atomic INSERT ... ON CONFLICT, the only correct option across
+// multiple isolates or processes), so it needs `sql` already on the context.
+// Registered the other way round it silently fails open on every request.
 app.use('*', async (c, next) => {
   const sql = createDb(c.env);
   c.set('sql', sql);
@@ -89,6 +97,8 @@ app.use('*', async (c, next) => {
     await sql.end({ timeout: 1 }).catch(() => undefined);
   }
 });
+
+app.use('*', rateLimiter);
 
 app.use('/api/v1/*', jwtAuth); // public plugin/webhook paths short-circuit inside
 app.use('/api/v1/*', injectOrgContext); // tenant scope enforcement

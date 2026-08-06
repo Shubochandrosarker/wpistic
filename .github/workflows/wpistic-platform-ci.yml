@@ -30,13 +30,31 @@ jobs:
         run: npm ci
 
       - name: Typecheck workspaces
-        run: npm run typecheck --workspace @wpistic/types --workspace @wpistic/auth-sdk --workspace @wpistic/platform-sdk --workspace @wpistic/account --workspace @wpistic/api --workspace @wpistic/dashboard --workspace @wpistic/admin
+        run: npm run typecheck --workspace @wpistic/types --workspace @wpistic/auth-sdk --workspace @wpistic/platform-sdk --workspace @wpistic/account --workspace @wpistic/api --workspace @wpistic/dashboard --workspace @wpistic/admin --workspace @wpistic/node-runtime
+
+      # The Node entry points are excluded from the Workers typecheck above, so
+      # that Node globals cannot leak into route code. Check them separately.
+      - name: Typecheck self-hosted entry points
+        run: |
+          npm --workspace @wpistic/api run typecheck:node
+          npm --workspace @wpistic/account run typecheck:node
 
       - name: API tests
         run: npm --workspace @wpistic/api run test -- --run
 
       - name: Platform SDK tests
         run: npm --workspace @wpistic/platform-sdk run test
+
+      - name: Self-hosted runtime tests
+        run: npm --workspace @wpistic/node-runtime run test
+
+      # Proves the self-hosted bundles still link. They are the deployable
+      # artifact for a VPS, so a broken bundle is a broken release.
+      - name: Bundle self-hosted entry points
+        run: |
+          npm --workspace @wpistic/api run build:node
+          npm --workspace @wpistic/api run build:scheduler
+          npm --workspace @wpistic/account run build:node
 
       - name: Dashboard build
         run: npm --workspace @wpistic/dashboard run build
@@ -74,6 +92,19 @@ jobs:
 
       - name: Validate the complete staging compose graph
         run: docker compose --env-file .env.staging -f docker-compose.staging.yml config --quiet
+
+      - name: Validate the self-hosted compose graph
+        run: |
+          cp .env.vps.example .env.vps
+          docker compose --env-file .env.vps -f docker-compose.vps.yml config --quiet
+          # Nothing may publish a host port: the API trusts CF-Connecting-IP,
+          # which is only trustworthy when the tunnel is the sole way in.
+          published=$(docker compose --env-file .env.vps -f docker-compose.vps.yml config | grep -c 'published:' || true)
+          if [ "$published" != "0" ]; then
+            echo "::error::docker-compose.vps.yml publishes $published host port(s); services must stay on the internal network."
+            exit 1
+          fi
+          rm -f .env.vps
 
   staging-smoke:
     needs: [verify, migration-validation, staging-config]

@@ -12,3 +12,7 @@ build/
 coverage/
 *.log
 .DS_Store
+
+# Self-hosted deployment configuration — contains live secrets.
+.env.vps
+dist-node/

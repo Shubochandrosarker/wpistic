@@ -33,7 +33,8 @@ import {
 import { getJwks, verifyAccessToken } from './auth/tokens';
 import { renderLoginPage, renderRegisterPage, renderResetPage } from './ui/pages';
 
-const app = new Hono<AppContext>();
+/** Exported for the self-hosted Node entry point — see api/src/index.ts. */
+export const app = new Hono<AppContext>();
 
 const ALLOWED_ORIGINS = [
   'https://app.wpistic.com',

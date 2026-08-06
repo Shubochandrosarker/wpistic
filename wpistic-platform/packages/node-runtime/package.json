@@ -1,0 +1,25 @@
+{
+  "name": "@wpistic/node-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Self-hosted runtime adapters \u2014 Postgres-backed KV, disk/S3 blob storage, in-process queue, and a Node ExecutionContext",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "postgres": "^3.4.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240925.0",
+    "@types/node": "^22.7.4",
+    "typescript": "^5.5.4",
+    "vitest": "^1.6.0"
+  }
+}
