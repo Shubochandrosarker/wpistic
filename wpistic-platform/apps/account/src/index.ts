@@ -31,6 +31,7 @@ import {
   handleSessionValidate,
 } from './auth/sessions';
 import { getJwks, verifyAccessToken } from './auth/tokens';
+import { randomToken } from './utils/crypto';
 import { renderLoginPage, renderRegisterPage, renderResetPage } from './ui/pages';
 
 /** Exported for the self-hosted Node entry point — see api/src/index.ts. */
@@ -54,13 +55,50 @@ app.use(
   })
 );
 
+/**
+ * `default-src 'none'` is the right policy for a JSON identity API, but this
+ * Worker also serves the login, register, and reset pages, and those carry an
+ * inline <style> and the inline <script> that submits the form over fetch.
+ * Applying the API policy to them blocked all three — the stylesheet, the
+ * script that calls preventDefault, and (via the form-action fallback) the
+ * native submit the browser tries next. The result was a Sign in button that
+ * did nothing at all, with no error in the UI to explain it.
+ *
+ * So the policy is chosen per response type. Pages get a nonce rather than
+ * 'unsafe-inline': the markup is generated server-side, the nonce is fresh on
+ * every request, and that keeps injected script inert on the one page in the
+ * ecosystem where a password is typed.
+ */
+const API_CSP = "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'";
+
+/**
+ * `form-action 'none'` stays on the pages too. The forms have no action or
+ * method — they are submitted by fetch — so a native submit would serialize
+ * the password into a query string on the current URL. Blocking it is
+ * deliberate, and with the script no longer blocked it is unreachable anyway.
+ */
+function pageCsp(nonce: string): string {
+  return [
+    "default-src 'none'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'none'",
+    `script-src 'nonce-${nonce}'`,
+    `style-src 'nonce-${nonce}'`,
+    "connect-src 'self'",
+  ].join('; ');
+}
+
 // Security headers on every response.
 app.use('*', async (c, next) => {
+  const nonce = randomToken(16);
+  c.set('cspNonce', nonce);
   await next();
+  const isHtml = (c.res.headers.get('Content-Type') ?? '').includes('text/html');
   c.header('X-Content-Type-Options', 'nosniff');
   c.header('Cache-Control', 'no-store');
   c.header('Pragma', 'no-cache');
-  c.header('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; form-action 'none'");
+  c.header('Content-Security-Policy', isHtml ? pageCsp(nonce) : API_CSP);
   c.header('X-Frame-Options', 'DENY');
   c.header('Referrer-Policy', 'no-referrer');
   c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
@@ -121,18 +159,28 @@ app.get('/', (c) => c.redirect(c.env.DEFAULT_REDIRECT, 302));
 app.get('/login', async (c) => {
   const client = await findOAuthClient(c.get('sql'), c.req.query('client') ?? 'wpistic_dashboard');
   return c.html(
-    renderLoginPage({ client, continueUrl: safeContinue(c, c.env.ISSUER, c.env.DEFAULT_REDIRECT), mode: 'login' })
+    renderLoginPage({
+      client,
+      continueUrl: safeContinue(c, c.env.ISSUER, c.env.DEFAULT_REDIRECT),
+      mode: 'login',
+      nonce: c.get('cspNonce'),
+    })
   );
 });
 
 app.get('/register', async (c) => {
   const client = await findOAuthClient(c.get('sql'), c.req.query('client') ?? 'wpistic_dashboard');
   return c.html(
-    renderRegisterPage({ client, continueUrl: safeContinue(c, c.env.ISSUER, c.env.DEFAULT_REDIRECT), mode: 'register' })
+    renderRegisterPage({
+      client,
+      continueUrl: safeContinue(c, c.env.ISSUER, c.env.DEFAULT_REDIRECT),
+      mode: 'register',
+      nonce: c.get('cspNonce'),
+    })
   );
 });
 
-app.get('/reset', (c) => c.html(renderResetPage('#C9A961', c.req.query('token') ?? null)));
+app.get('/reset', (c) => c.html(renderResetPage(c.get('cspNonce'), '#C9A961', c.req.query('token') ?? null)));
 
 // ---------------------------------------------------------------------------
 // Auth API
