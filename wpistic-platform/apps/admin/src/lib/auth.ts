@@ -1,4 +1,5 @@
 export interface AdminRuntimeEnv {
+  ENVIRONMENT: 'staging' | 'production';
   ACCOUNT_URL: string;
   PUBLIC_ACCOUNT_URL: string;
   API_URL: string;

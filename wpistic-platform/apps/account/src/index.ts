@@ -13,7 +13,7 @@ import {
   passwordResetRequestSchema,
   registerSchema,
 } from '@wpistic/types';
-import type { AppContext } from './env';
+import type { AppContext, Env } from './env';
 import { ACCESS_TOKEN_TTL_SECONDS } from './env';
 import { createDb } from './db/client';
 import { findOAuthClient, findUserById, listUserOrganizations } from './db/schema';
@@ -36,33 +36,52 @@ import { renderLoginPage, renderRegisterPage, renderResetPage } from './ui/pages
 /** Exported for the self-hosted Node entry point — see api/src/index.ts. */
 export const app = new Hono<AppContext>();
 
-const ALLOWED_ORIGINS = [
-  'https://app.wpistic.com',
-  'https://admin.wpistic.com',
-  'https://app.chatbotistic.com',
-  'https://app.insightistic.com',
-  'https://app.tripistic.com',
-  'https://app.wpagentistic.com',
-  'http://localhost:5173',
-  'http://localhost:4321',
-];
+function allowedOrigins(environment: Env['ENVIRONMENT']): string[] {
+  const origins = environment === 'production'
+    ? ['https://www.wpistic.com', 'https://account.wpistic.com', 'https://api.wpistic.com', 'https://app.wpistic.com', 'https://admin.wpistic.com']
+    : ['https://www-staging.wpistic.com', 'https://account-staging.wpistic.com', 'https://api-staging.wpistic.com', 'https://app-staging.wpistic.com', 'https://admin-staging.wpistic.com'];
+  return [...origins, ...(environment === 'staging' ? ['http://localhost:5173', 'http://localhost:4321'] : [])];
+}
 
 app.use(
   '*',
   cors({
-    origin: (origin) => (ALLOWED_ORIGINS.includes(origin) ? origin : undefined),
+    origin: (origin, c) => allowedOrigins(c.env.ENVIRONMENT).includes(origin) ? origin : undefined,
     credentials: true,
-    allowHeaders: ['Content-Type', 'Authorization'],
+    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization', 'X-Correlation-Id'],
+    maxAge: 600,
   })
 );
 
 // Security headers on every response.
 app.use('*', async (c, next) => {
   await next();
-  c.header('X-Frame-Options', 'DENY');
   c.header('X-Content-Type-Options', 'nosniff');
-  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  c.header('Cache-Control', 'no-store');
+  c.header('Pragma', 'no-cache');
+  c.header('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; form-action 'none'");
+  c.header('X-Frame-Options', 'DENY');
+  c.header('Referrer-Policy', 'no-referrer');
   c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+});
+
+app.use('*', async (c, next) => {
+  const start = Date.now();
+  const requestId = c.req.header('X-Correlation-Id') ?? crypto.randomUUID();
+  await next();
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level: c.res.status >= 500 ? 'error' : 'info',
+    service: 'wpistic-account',
+    environment: c.env.ENVIRONMENT,
+    request_id: requestId,
+    correlation_id: requestId,
+    route: c.req.path,
+    status: c.res.status,
+    duration_ms: Date.now() - start,
+    error_code: c.res.status >= 400 ? 'http_error' : undefined,
+  }));
 });
 
 // Per-request DB client, closed after the response is streamed.

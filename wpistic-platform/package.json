@@ -2,7 +2,7 @@
   "name": "wpistic-platform",
   "version": "0.1.0",
   "private": true,
-  "description": "WPistic ecosystem control plane \u2014 federated edge-native SaaS platform on Cloudflare Workers",
+  "description": "WPistic ecosystem control plane — federated edge-native SaaS platform on Cloudflare Workers",
   "workspaces": [
     "apps/*",
     "packages/*",
@@ -34,11 +34,22 @@
     "vps:logs": "docker compose --env-file .env.vps -f docker-compose.vps.yml logs -f",
     "vps:ps": "docker compose --env-file .env.vps -f docker-compose.vps.yml ps",
     "vps:secrets": "node docker/generate-vps-secrets.mjs",
-    "vps:up": "docker compose --env-file .env.vps -f docker-compose.vps.yml up -d --build"
+    "vps:up": "docker compose --env-file .env.vps -f docker-compose.vps.yml up -d --build",
+    "cloudflare:typecheck": "npm run typecheck --workspaces --if-present",
+    "cloudflare:verify": "node ../scripts/cloudflare/verify.mjs",
+    "cloudflare:dry-run:staging": "npm run dry-run:staging --workspace @wpistic/account && npm run dry-run:staging --workspace @wpistic/api && npm run dry-run:staging --workspace @wpistic/dashboard && npm run dry-run:staging --workspace @wpistic/admin && npm --prefix ../wpistic-marketing run dry-run:staging",
+    "cloudflare:dry-run:production": "npm run dry-run:production --workspace @wpistic/account && npm run dry-run:production --workspace @wpistic/api && npm run dry-run:production --workspace @wpistic/dashboard && npm run dry-run:production --workspace @wpistic/admin && npm --prefix ../wpistic-marketing run dry-run:production",
+    "cloudflare:deploy:staging": "npm run deploy:staging --workspace @wpistic/account && npm run deploy:staging --workspace @wpistic/api && npm run deploy:staging --workspace @wpistic/dashboard && npm run deploy:staging --workspace @wpistic/admin && npm --prefix ../wpistic-marketing run deploy:staging",
+    "cloudflare:deploy:production": "npm run deploy:production --workspace @wpistic/account && npm run deploy:production --workspace @wpistic/api && npm run deploy:production --workspace @wpistic/dashboard && npm run deploy:production --workspace @wpistic/admin && npm --prefix ../wpistic-marketing run deploy:production",
+    "cloudflare:smoke:staging": "node tests/e2e/cloudflare-smoke.mjs staging",
+    "cloudflare:smoke:production": "node tests/e2e/cloudflare-smoke.mjs production",
+    "cloudflare:provision:staging": "node ../scripts/cloudflare/provision.mjs --environment staging",
+    "cloudflare:provision:production": "node ../scripts/cloudflare/provision.mjs --environment production"
   },
   "devDependencies": {
     "esbuild": "^0.24.2",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "wrangler": "4.114.0"
   },
   "engines": {
     "node": ">=20"

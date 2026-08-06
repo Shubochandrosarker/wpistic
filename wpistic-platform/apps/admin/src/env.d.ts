@@ -2,6 +2,7 @@
 /// <reference types="astro/client" />
 
 type Runtime = import('@astrojs/cloudflare').Runtime<{
+    ENVIRONMENT: 'staging' | 'production';
     API_URL: string;
     DASHBOARD_URL: string;
     ACCOUNT_URL: string;

@@ -1,110 +1,66 @@
 {
-  "name": "wpistic-api",
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "compatibility_date": "2026-08-06",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "main": "src/index.ts",
-  "compatibility_date": "2026-08-02",
-  "compatibility_flags": ["nodejs_compat"],
-  "routes": [{ "pattern": "api.wpistic.com", "custom_domain": true }],
-  "triggers": {
-    // Outbox publisher (events/outbox.ts) — every minute is the finest grain Cloudflare Cron Triggers support.
-    "crons": ["* * * * *"]
-  },
-  "hyperdrive": [
-    {
-      "binding": "HYPERDRIVE",
-      "id": "YOUR_HYPERDRIVE_ID",
-      "localConnectionString": "postgresql://wpistic:password@localhost:5432/wpistic"
-    }
-  ],
-  "kv_namespaces": [
-    { "binding": "RATE_LIMIT", "id": "YOUR_KV_ID" },
-    { "binding": "SESSION_CACHE", "id": "YOUR_KV_ID_2" }
-  ],
-  "queues": {
-    "producers": [{ "binding": "EVENT_BUS", "queue": "wpistic-events" }],
-    "consumers": [
-      {
-        "queue": "wpistic-events",
-        "max_batch_size": 25,
-        "max_retries": 5,
-        "dead_letter_queue": "wpistic-events-dlq"
-      }
-    ]
-  },
-  "r2_buckets": [
-    { "binding": "UPDATE_PACKAGES", "bucket_name": "wpistic-updates" },
-    { "binding": "ASSETS", "bucket_name": "wpistic-assets" }
-  ],
-  "vars": {
-    "ACCOUNT_SERVICE_URL": "https://account.wpistic.com",
-    "DASHBOARD_URL": "https://app.wpistic.com",
-    "PUBLIC_API_URL": "https://api.wpistic.com",
-    "PUBLIC_ACCOUNT_URL": "https://account.wpistic.com",
-    "PUBLIC_DASHBOARD_URL": "https://app.wpistic.com",
-    "PUBLIC_ADMIN_URL": "https://admin.wpistic.com",
-    "BILLING_MODE": "FREE_ONLY",
-    "STRIPE_PUBLISHABLE_KEY": "",
-    // Comma-separated staff allowlist. Empty means nobody can reach /admin.
-    "ADMIN_EMAILS": "",
-    // Staff role ladder, "email=role" pairs. Roles, least to most privileged:
-    //   support_agent  (default) — read + license suspend/reactivate + impersonate
-    //   billing_admin            — + license issue/plan change/seats/expiry/transfer
-    //   platform_admin           — + catalog, organizations, grants, members, users
-    //   super_admin              — everything
-    "ADMIN_ROLES": ""
-  },
-  // Secrets (set via `wrangler secret put <NAME>` — add `--env staging` for staging):
-  //   STRIPE_SECRET_KEY       — Stripe API key (test-mode key on staging)
-  //   STRIPE_WEBHOOK_SECRET   — Stripe webhook signing secret
-  //   LICENSE_SIGNING_SECRET  — HMAC master key for license response signatures
-  //   LICENSE_JWT_PRIVATE_KEY — RS256 private key (PKCS8 PEM) for activation tokens
-  //   LICENSE_JWT_PUBLIC_KEY  — RS256 public key (SPKI PEM) for activation tokens
-  //   JWT_PUBLIC_KEY          — verifies access tokens from account.wpistic.com
-  //   JWT_PRIVATE_KEY         — re-signs access tokens on org switch
-  //   ADMIN_API_TOKEN         — local release automation only; never configure in production
-  //   MFA_ENC_KEY             — same AES key as the account service (admin MFA checks)
-  //
-  // Staging: deploy with `wrangler deploy --env staging` after replacing the
-  // STAGING_* placeholder IDs below with real resources:
-  //   wrangler hyperdrive create wpistic-staging --connection-string=<staging postgres url>
-  //   wrangler kv namespace create RATE_LIMIT --env staging
-  //   wrangler kv namespace create SESSION_CACHE --env staging
-  //   wrangler r2 bucket create wpistic-staging-updates
-  //   wrangler r2 bucket create wpistic-staging-assets
-  //   wrangler queues create wpistic-staging-events
-  //   wrangler queues create wpistic-staging-events-dlq
   "env": {
     "staging": {
-      "routes": [{ "pattern": "api-staging.wpistic.com", "custom_domain": true }],
-      "triggers": {
-        "crons": ["* * * * *"]
-      },
+      "name": "wpistic-api-staging",
+      "routes": [
+        {
+          "pattern": "api-staging.wpistic.com",
+          "custom_domain": true
+        }
+      ],
       "hyperdrive": [
         {
-          "binding": "HYPERDRIVE",
-          "id": "STAGING_HYPERDRIVE_ID",
-          "localConnectionString": "postgresql://wpistic:password@localhost:5432/wpistic"
+          "binding": "HYPERDRIVE"
         }
       ],
       "kv_namespaces": [
-        { "binding": "RATE_LIMIT", "id": "STAGING_RATE_LIMIT_KV_ID" },
-        { "binding": "SESSION_CACHE", "id": "STAGING_SESSION_CACHE_KV_ID" }
+        {
+          "binding": "RATE_LIMIT"
+        },
+        {
+          "binding": "SESSION_CACHE"
+        }
       ],
       "queues": {
-        "producers": [{ "binding": "EVENT_BUS", "queue": "wpistic-staging-events" }],
+        "producers": [
+          {
+            "binding": "EVENT_BUS",
+            "queue": "wpistic-staging-events"
+          }
+        ],
         "consumers": [
           {
             "queue": "wpistic-staging-events",
             "max_batch_size": 25,
+            "max_batch_timeout": 30,
             "max_retries": 5,
             "dead_letter_queue": "wpistic-staging-events-dlq"
           }
         ]
       },
       "r2_buckets": [
-        { "binding": "UPDATE_PACKAGES", "bucket_name": "wpistic-staging-updates" },
-        { "binding": "ASSETS", "bucket_name": "wpistic-staging-assets" }
+        {
+          "binding": "UPDATE_PACKAGES",
+          "bucket_name": "wpistic-staging-updates"
+        },
+        {
+          "binding": "ASSETS",
+          "bucket_name": "wpistic-staging-assets"
+        }
       ],
+      "triggers": {
+        "crons": [
+          "* * * * *"
+        ]
+      },
       "vars": {
+        "ENVIRONMENT": "staging",
         "ACCOUNT_SERVICE_URL": "https://account-staging.wpistic.com",
         "DASHBOARD_URL": "https://app-staging.wpistic.com",
         "PUBLIC_API_URL": "https://api-staging.wpistic.com",
@@ -115,7 +71,104 @@
         "STRIPE_PUBLISHABLE_KEY": "",
         "ADMIN_EMAILS": "",
         "ADMIN_ROLES": ""
-      }
+      },
+      "secrets": {
+        "required": [
+          "LICENSE_SIGNING_SECRET",
+          "LICENSE_JWT_PRIVATE_KEY",
+          "LICENSE_JWT_PUBLIC_KEY",
+          "JWT_PRIVATE_KEY",
+          "JWT_PUBLIC_KEY",
+          "MFA_ENC_KEY"
+        ]
+      },
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1
+      },
+      "workers_dev": false
+    },
+    "production": {
+      "name": "wpistic-api",
+      "routes": [
+        {
+          "pattern": "api.wpistic.com",
+          "custom_domain": true
+        }
+      ],
+      "hyperdrive": [
+        {
+          "binding": "HYPERDRIVE"
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "RATE_LIMIT"
+        },
+        {
+          "binding": "SESSION_CACHE"
+        }
+      ],
+      "queues": {
+        "producers": [
+          {
+            "binding": "EVENT_BUS",
+            "queue": "wpistic-events"
+          }
+        ],
+        "consumers": [
+          {
+            "queue": "wpistic-events",
+            "max_batch_size": 25,
+            "max_batch_timeout": 30,
+            "max_retries": 5,
+            "dead_letter_queue": "wpistic-events-dlq"
+          }
+        ]
+      },
+      "r2_buckets": [
+        {
+          "binding": "UPDATE_PACKAGES",
+          "bucket_name": "wpistic-updates"
+        },
+        {
+          "binding": "ASSETS",
+          "bucket_name": "wpistic-assets"
+        }
+      ],
+      "triggers": {
+        "crons": [
+          "* * * * *"
+        ]
+      },
+      "vars": {
+        "ENVIRONMENT": "production",
+        "ACCOUNT_SERVICE_URL": "https://account.wpistic.com",
+        "DASHBOARD_URL": "https://app.wpistic.com",
+        "PUBLIC_API_URL": "https://api.wpistic.com",
+        "PUBLIC_ACCOUNT_URL": "https://account.wpistic.com",
+        "PUBLIC_DASHBOARD_URL": "https://app.wpistic.com",
+        "PUBLIC_ADMIN_URL": "https://admin.wpistic.com",
+        "BILLING_MODE": "FREE_ONLY",
+        "STRIPE_PUBLISHABLE_KEY": "",
+        "ADMIN_EMAILS": "",
+        "ADMIN_ROLES": ""
+      },
+      "secrets": {
+        "required": [
+          "LICENSE_SIGNING_SECRET",
+          "LICENSE_JWT_PRIVATE_KEY",
+          "LICENSE_JWT_PUBLIC_KEY",
+          "JWT_PRIVATE_KEY",
+          "JWT_PUBLIC_KEY",
+          "MFA_ENC_KEY"
+        ]
+      },
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 0.25
+      },
+      "workers_dev": false
     }
   }
 }

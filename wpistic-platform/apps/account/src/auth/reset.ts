@@ -11,6 +11,10 @@ import { findUserByEmail, recordSecurityEvent, revokeAllSessions } from '../db/s
 import { getClientIp } from './sessions';
 
 export async function handlePasswordResetRequest(c: Context<AppContext>, input: { email: string }) {
+  if (!c.env.EMAIL_WEBHOOK_URL) {
+    console.error(JSON.stringify({ level: 'error', service: 'wpistic-account', environment: c.env.ENVIRONMENT, event: 'email_relay_missing' }));
+    return c.json({ error: { code: 'email_unavailable', message: 'Password reset is temporarily unavailable' } }, 503);
+  }
   const sql = c.get('sql');
   const user = await findUserByEmail(sql, input.email);
 
@@ -25,7 +29,7 @@ export async function handlePasswordResetRequest(c: Context<AppContext>, input: 
       ipAddress: getClientIp(c),
     });
 
-    if (c.env.EMAIL_WEBHOOK_URL) {
+    {
       const resetUrl = `${c.env.ISSUER}/reset?token=${token}`;
       c.executionCtx.waitUntil(
         fetch(c.env.EMAIL_WEBHOOK_URL, {

@@ -9,7 +9,13 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "vite build && wrangler deploy",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:staging": "VITE_API_URL=https://api-staging.wpistic.com VITE_ACCOUNT_URL=https://account-staging.wpistic.com vite build",
+    "build:production": "VITE_API_URL=https://api.wpistic.com VITE_ACCOUNT_URL=https://account.wpistic.com vite build",
+    "deploy:staging": "npm run build:staging && wrangler deploy --env staging",
+    "deploy:production": "npm run build:production && wrangler deploy --env production",
+    "dry-run:staging": "npm run build:staging && wrangler deploy --env staging --dry-run",
+    "dry-run:production": "npm run build:production && wrangler deploy --env production --dry-run"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.56.2",
@@ -33,6 +39,6 @@
     "tailwindcss": "^3.4.13",
     "typescript": "^5.5.4",
     "vite": "^5.4.8",
-    "wrangler": "^3.80.0"
+    "wrangler": "4.114.0"
   }
 }

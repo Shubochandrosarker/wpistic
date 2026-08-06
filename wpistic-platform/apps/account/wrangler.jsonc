@@ -1,27 +1,86 @@
 {
-  "name": "wpistic-account",
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "compatibility_date": "2026-08-06",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "main": "src/index.ts",
-  "compatibility_date": "2026-08-02",
-  "compatibility_flags": ["nodejs_compat"],
-  "routes": [{ "pattern": "account.wpistic.com", "custom_domain": true }],
-  "hyperdrive": [
-    {
-      "binding": "HYPERDRIVE",
-      "id": "YOUR_HYPERDRIVE_ID",
-      "localConnectionString": "postgresql://wpistic:password@localhost:5432/wpistic"
+  "env": {
+    "staging": {
+      "name": "wpistic-account-staging",
+      "routes": [
+        {
+          "pattern": "account-staging.wpistic.com",
+          "custom_domain": true
+        }
+      ],
+      "hyperdrive": [
+        {
+          "binding": "HYPERDRIVE"
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "PKCE_STORAGE"
+        }
+      ],
+      "vars": {
+        "ENVIRONMENT": "staging",
+        "ISSUER": "https://account-staging.wpistic.com",
+        "COOKIE_DOMAIN": "account-staging.wpistic.com",
+        "DEFAULT_REDIRECT": "https://app-staging.wpistic.com"
+      },
+      "secrets": {
+        "required": [
+          "JWT_PRIVATE_KEY",
+          "JWT_PUBLIC_KEY",
+          "MFA_ENC_KEY",
+          "EMAIL_WEBHOOK_URL"
+        ]
+      },
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1
+      },
+      "workers_dev": false
+    },
+    "production": {
+      "name": "wpistic-account",
+      "routes": [
+        {
+          "pattern": "account.wpistic.com",
+          "custom_domain": true
+        }
+      ],
+      "hyperdrive": [
+        {
+          "binding": "HYPERDRIVE"
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "PKCE_STORAGE"
+        }
+      ],
+      "vars": {
+        "ENVIRONMENT": "production",
+        "ISSUER": "https://account.wpistic.com",
+        "COOKIE_DOMAIN": "account.wpistic.com",
+        "DEFAULT_REDIRECT": "https://app.wpistic.com"
+      },
+      "secrets": {
+        "required": [
+          "JWT_PRIVATE_KEY",
+          "JWT_PUBLIC_KEY",
+          "MFA_ENC_KEY",
+          "EMAIL_WEBHOOK_URL"
+        ]
+      },
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 0.25
+      },
+      "workers_dev": false
     }
-  ],
-  "kv_namespaces": [
-    { "binding": "PKCE_STORAGE", "id": "YOUR_KV_ID" }
-  ],
-  "vars": {
-    "ISSUER": "https://account.wpistic.com",
-    "COOKIE_DOMAIN": "account.wpistic.com",
-    "DEFAULT_REDIRECT": "https://app.wpistic.com"
   }
-  // Secrets (set via `wrangler secret put <NAME>`):
-  //   JWT_PRIVATE_KEY  — RS256 private key, PKCS8 PEM
-  //   JWT_PUBLIC_KEY   — RS256 public key, SPKI PEM
-  //   MFA_ENC_KEY      — base64 32-byte key for AES-GCM encryption of TOTP secrets
-  //   EMAIL_WEBHOOK_URL (optional) — transactional email relay endpoint
 }

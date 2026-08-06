@@ -3,14 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "account.wpistic.com \u2014 OAuth 2.1 / OIDC identity service on Cloudflare Workers",
+  "description": "account.wpistic.com — OAuth 2.1 / OIDC identity service on Cloudflare Workers",
   "scripts": {
     "build:node": "esbuild src/server.node.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist-node/server.mjs --banner:js=\"import{createRequire}from'node:module';const require=createRequire(import.meta.url);\"",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev --port 8788",
     "serve:node": "node --experimental-strip-types src/server.node.ts",
     "typecheck": "tsc --noEmit",
-    "typecheck:node": "tsc --noEmit -p tsconfig.node.json"
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env production",
+    "dry-run:staging": "wrangler deploy --env staging --dry-run",
+    "dry-run:production": "wrangler deploy --env production --dry-run",
+    "test": "vitest run"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.4.1",
@@ -24,10 +29,10 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240925.0",
+    "@cloudflare/workers-types": "5.20260728.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.7.4",
     "typescript": "^5.5.4",
-    "wrangler": "^3.80.0"
+    "wrangler": "4.114.0"
   }
 }

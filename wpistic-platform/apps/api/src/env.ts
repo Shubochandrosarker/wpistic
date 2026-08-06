@@ -3,6 +3,7 @@ import type { OrgRole } from '@wpistic/types';
 import type { EventBus } from './events/bus';
 
 export interface Env {
+  ENVIRONMENT: 'staging' | 'production';
   HYPERDRIVE: Hyperdrive;
   RATE_LIMIT: KVNamespace;
   /** Optional Cloudflare native rate-limit binding for distributed edge enforcement. */
