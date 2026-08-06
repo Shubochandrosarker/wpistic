@@ -31,3 +31,11 @@ export default defineConfig({
       }
     : {}),
 });
+vite: {
+            ssr: {
+              noExternal: true,
+            },
+            resolve: {
+              dedupe: ['react', 'react-dom'],
+            },
+          },
