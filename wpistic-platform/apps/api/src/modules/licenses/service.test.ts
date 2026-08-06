@@ -207,6 +207,80 @@ describe('LicenseService', () => {
     });
   });
 
+  describe('issue', () => {
+    it('derives the activation limit from the plan\u2019s <product>.sites.max entitlement', async () => {
+      mockSql.mockResolvedValueOnce([{ slug: 'testprod' }]); // product lookup
+      mockSql.mockResolvedValueOnce([{ value: 3 }]); // plan_entitlements lookup
+      mockSql.mockResolvedValueOnce([{ id: testData.uuids.license }]); // INSERT licenses
+      mockSql.mockResolvedValueOnce([]); // license_events
+      mockSql.mockResolvedValueOnce([]); // event_outbox
+
+      const result = await licenseService.issue({
+        organizationId: testData.uuids.org,
+        productId: testData.uuids.product,
+        planId: testData.uuids.plan,
+      });
+
+      expect(result.rawKey).toMatch(/^testprod_/);
+      expect(result.rawKey).not.toBe(result.mask);
+      const insert = mockSql.mock.calls.find((call: unknown[]) => (call[0] as string[]).join('').includes('INSERT INTO licenses'));
+      expect(insert).toBeTruthy();
+      expect(insert).toContain(3); // max_activations came from the entitlement
+    });
+
+    it('runs inside a caller-supplied transaction instead of opening its own', async () => {
+      // The free-product claim folds issuance into the claim transaction so a
+      // customer can never hold a grant without a key. If issue() opened its
+      // own transaction here, that atomicity would be a fiction.
+      const tx: any = createMockSql();
+      tx.mockResolvedValueOnce([{ slug: 'testprod' }]);
+      tx.mockResolvedValueOnce([{ value: 1 }]);
+      tx.mockResolvedValueOnce([{ id: testData.uuids.license }]);
+      tx.mockResolvedValueOnce([]);
+      tx.mockResolvedValueOnce([]);
+
+      const result = await licenseService.issue(
+        {
+          organizationId: testData.uuids.org,
+          productId: testData.uuids.product,
+          planId: testData.uuids.plan,
+          actor: { type: 'user', id: testData.uuids.user },
+        },
+        tx
+      );
+
+      expect(result.licenseId).toBe(testData.uuids.license);
+      expect(mockSql.begin).not.toHaveBeenCalled();
+      expect(tx.begin).not.toHaveBeenCalled();
+      // Every write landed on the caller's transaction, not the base client.
+      expect(mockSql).not.toHaveBeenCalled();
+      const outbox = tx.mock.calls.find((call: unknown[]) => (call[0] as string[]).join('').includes('event_outbox'));
+      expect(outbox).toContain('license.issued');
+    });
+
+    it('honors an explicit activation limit over the plan entitlement', async () => {
+      mockSql.mockResolvedValueOnce([{ slug: 'testprod' }]);
+      mockSql.mockResolvedValueOnce([{ id: testData.uuids.license }]);
+      mockSql.mockResolvedValueOnce([]);
+      mockSql.mockResolvedValueOnce([]);
+
+      await licenseService.issue({
+        organizationId: testData.uuids.org,
+        productId: testData.uuids.product,
+        planId: testData.uuids.plan,
+        maxActivations: 25,
+      });
+
+      // No entitlement lookup happens when the caller states the limit.
+      const entitlementLookup = mockSql.mock.calls.find((call: unknown[]) =>
+        (call[0] as string[]).join('').includes('plan_entitlements')
+      );
+      expect(entitlementLookup).toBeUndefined();
+      const insert = mockSql.mock.calls.find((call: unknown[]) => (call[0] as string[]).join('').includes('INSERT INTO licenses'));
+      expect(insert).toContain(25);
+    });
+  });
+
   describe('deactivateById', () => {
     it('marks the activation inactive, blocklists its token, and writes a transactional outbox event', async () => {
       const activation = activationRow('hash-to-revoke');

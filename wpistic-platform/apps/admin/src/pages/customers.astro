@@ -40,6 +40,7 @@ const rows = data.customers.map((c) => ({
   </div>
   <DataTable
     client:load
+    rowHref="/organizations/{id}"
     columns={[
       { key: 'name', label: 'Organization' },
       { key: 'owner', label: 'Owner email' },

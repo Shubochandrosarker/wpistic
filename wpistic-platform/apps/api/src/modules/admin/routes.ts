@@ -1,15 +1,23 @@
 /**
  * Admin module (admin.wpistic.com backend). Auth: a staff JWT whose email is
  * in ADMIN_EMAILS and whose scope includes `admin`.
- * Impersonation additionally demands a fresh MFA code and a written reason,
- * and mints a 30-minute restricted token; every admin mutation is audited
- * with actor_type='admin'.
+ *
+ * This file owns the read surfaces (stats, customers, licenses, subscriptions,
+ * invoices, audit, system health) plus impersonation and complimentary access.
+ * The management surfaces live in sibling modules mounted at the bottom:
+ *
+ *   ./catalog    — products, plans, prices, features, entitlements
+ *   ./tenancy    — organizations, access grants, members, users
+ *   ./licensing  — issue, upgrade/downgrade, seats, expiry, transfer
+ *
+ * Authorization, step-up windows, and the audit helpers they all share live in
+ * ./guards. Routine management runs behind a 15-minute TOTP step-up window;
+ * irreversible actions always demand a code for that specific action.
  */
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { SignJWT, importPKCS8 } from 'jose';
-import type { Context, MiddlewareHandler } from 'hono';
 import { adminLicenseActionSchema, impersonateSchema } from '@wpistic/types';
 import type { AppContext, Env } from '../../env';
 import { ApiError } from '../../errors';
@@ -19,61 +27,41 @@ import { makeLicenseService } from '../licenses/routes';
 import { EntitlementService } from '../entitlements/service';
 import { makeBillingService } from '../billing/routes';
 import { packageRoutes } from '../updates/routes';
-
-const requireAdmin: MiddlewareHandler<AppContext> = async (c, next) => {
-  const kind = c.get('authKind');
-  if (kind === 'admin_token' && c.env.ALLOW_LEGACY_ADMIN_TOKEN === 'true') return next();
-  if (kind === 'jwt') {
-    const email = c.get('user')?.email?.toLowerCase();
-    const allowlist = c.env.ADMIN_EMAILS.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
-    const scopes = c.get('scopes') ?? [];
-    if (email && allowlist.includes(email) && scopes.includes('admin')) {
-      const configuredRole = c.env.ADMIN_ROLES?.split(',')
-        .map((pair) => pair.trim().split('=', 2))
-        .find(([configuredEmail]) => configuredEmail?.toLowerCase() === email)?.[1];
-      c.set('adminRole', configuredRole ?? 'support_agent');
-      return next();
-    }
-  }
-  throw ApiError.forbidden('Admin access required');
-};
-
-/** High-risk mutations require a fresh TOTP code in addition to the staff JWT. */
-async function requireFreshMfa(c: Context<AppContext>, code: string | undefined): Promise<void> {
-  const admin = c.get('user');
-  if (!admin || !code) throw ApiError.forbidden('Fresh MFA is required for this action');
-  const rows = await c.get('sql')<{ mfa_enabled: boolean; mfa_secret: string | null }[]>`
-    SELECT mfa_enabled, mfa_secret FROM users WHERE id = ${admin.id} LIMIT 1`;
-  const user = rows[0];
-  if (!user?.mfa_enabled || !user.mfa_secret) throw ApiError.forbidden('Staff MFA must be enabled');
-  let secret: string;
-  try {
-    secret = await decryptMfaSecret(user.mfa_secret, c.env.MFA_ENC_KEY);
-  } catch {
-    throw ApiError.forbidden('Staff MFA configuration is invalid');
-  }
-  if (!(await verifyTotpCode(secret, code))) throw ApiError.unauthorized('MFA code is invalid or expired');
-}
-
-async function adminAudit(
-  c: Context<AppContext>,
-  action: string,
-  resourceType: string,
-  resourceId: string | null,
-  orgId: string | null,
-  details: Record<string, unknown>
-): Promise<void> {
-  const sql = c.get('sql');
-  await sql`
-    INSERT INTO audit_logs (organization_id, user_id, actor_type, action, resource_type, resource_id,
-                            new_values, ip_address, user_agent, correlation_id)
-    VALUES (${orgId}, ${c.get('user')?.id ?? null}, 'admin', ${action}, ${resourceType}, ${resourceId},
-            ${sql.json(details as never)}, ${getClientIp(c)}, ${c.req.header('User-Agent') ?? null},
-            ${c.get('correlationId')})`;
-}
+import { adminCatalogRoutes } from './catalog';
+import { adminTenancyRoutes } from './tenancy';
+import { adminLicensingRoutes } from './licensing';
+import {
+  adminAudit,
+  closeStepUp,
+  openStepUp,
+  requireAdmin,
+  requireFreshMfa,
+  stepUpStatus,
+} from './guards';
 
 export const adminRoutes = new Hono<AppContext>();
 adminRoutes.use('*', requireAdmin);
+
+// ---------------------------------------------------------------------------
+// Step-up session — one TOTP entry opens a 15-minute window for routine
+// management work. Irreversible actions ignore it and ask for a code anyway.
+// ---------------------------------------------------------------------------
+
+adminRoutes.get('/step-up', async (c) => c.json(await stepUpStatus(c)));
+
+adminRoutes.post('/step-up', zValidator('json', z.object({ mfa_code: z.string().min(6).max(10) })), async (c) => {
+  if (c.get('authKind') !== 'jwt') {
+    throw ApiError.forbidden('Step-up requires a personal staff session, not the automation token');
+  }
+  const result = await openStepUp(c, c.req.valid('json').mfa_code);
+  await adminAudit(c, 'admin.step_up', 'users', c.get('user')?.id ?? null, null, { expires_at: result.expires_at });
+  return c.json({ active: true, ...result });
+});
+
+adminRoutes.delete('/step-up', async (c) => {
+  await closeStepUp(c);
+  return c.json({ active: false, expires_at: null });
+});
 
 // ---------------------------------------------------------------------------
 // Dashboard stats
@@ -206,6 +194,53 @@ adminRoutes.get('/licenses', async (c) => {
       AND (${status} = '' OR l.status = ${status})
     ORDER BY l.created_at DESC LIMIT 100`;
   return c.json({ licenses });
+});
+
+/** Single license, with everything the detail screen needs to offer a plan change. */
+adminRoutes.get('/licenses/:licenseId', async (c) => {
+  const sql = c.get('sql');
+  const licenseId = c.req.param('licenseId');
+
+  const rows = await sql<
+    Array<{
+      id: string;
+      key_mask: string;
+      status: string;
+      product: string;
+      product_id: string;
+      plan: string;
+      organization: string;
+      organization_id: string;
+      max_activations: number;
+      active_activations: number;
+      expires_at: string | null;
+      grace_period_ends_at: string | null;
+      created_at: string;
+    }>
+  >`
+    SELECT l.id, l.key_mask, l.status, p.slug AS product, p.id AS product_id, pl.slug AS plan,
+           o.name AS organization, o.id AS organization_id, l.max_activations,
+           (SELECT COUNT(*)::int FROM license_activations a
+             WHERE a.license_id = l.id AND a.status = 'active' AND a.environment = 'production') AS active_activations,
+           l.expires_at, l.grace_period_ends_at, l.created_at
+    FROM licenses l
+    JOIN products p ON p.id = l.product_id
+    JOIN plans pl ON pl.id = l.plan_id
+    JOIN organizations o ON o.id = l.organization_id
+    WHERE l.id = ${licenseId} LIMIT 1`;
+  const license = rows[0];
+  if (!license) throw ApiError.notFound('License');
+
+  const [activations, events, plans] = await Promise.all([
+    sql`SELECT id, domain_normalized, environment, status, product_version, first_activated_at, last_seen_at
+        FROM license_activations WHERE license_id = ${licenseId} ORDER BY first_activated_at DESC`,
+    sql`SELECT event_type, actor_type, domain, ip_address::text AS ip_address, metadata, created_at
+        FROM license_events WHERE license_id = ${licenseId} ORDER BY created_at DESC LIMIT 50`,
+    sql`SELECT slug FROM plans WHERE product_id = ${license.product_id} AND status = 'active'
+        ORDER BY sort_order ASC, slug ASC`,
+  ]);
+
+  return c.json({ license, activations, events, plans });
 });
 
 adminRoutes.post('/licenses/:licenseId/action', zValidator('json', adminLicenseActionSchema), async (c) => {
@@ -523,3 +558,16 @@ adminRoutes.post('/impersonate', zValidator('json', impersonateSchema), async (c
 // ---------------------------------------------------------------------------
 
 adminRoutes.route('/packages', packageRoutes);
+
+// ---------------------------------------------------------------------------
+// Management surfaces.
+//
+// Each gets its own prefix rather than being merged into the root. A
+// sub-router's `use('*')` is registered relative to its mount point, so
+// mounting these at '/' would apply their role floors to every read route
+// above — locking support agents out of the customer list.
+// ---------------------------------------------------------------------------
+
+adminRoutes.route('/catalog', adminCatalogRoutes); // platform_admin+
+adminRoutes.route('/tenancy', adminTenancyRoutes); // platform_admin+
+adminRoutes.route('/licensing', adminLicensingRoutes); // billing_admin+

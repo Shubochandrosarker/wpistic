@@ -1,0 +1,114 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import OrgManager, { type Grant, type Member, type Organization } from '../../components/OrgManager.tsx';
+import IssueLicense, { type CatalogOption } from '../../components/IssueLicense.tsx';
+import { adminContext, adminGet, shortDate } from '../../lib/api';
+
+const { orgId } = Astro.params;
+const ctx = adminContext(Astro);
+
+interface DetailResponse {
+  organization: Organization;
+  members: Member[];
+  licenses: Array<{ id: string; key_mask: string; status: string; product: string; expires_at: string | null }>;
+  websites: Array<{ id: string; domain_normalized: string; environment: string; is_connected: boolean }>;
+}
+
+interface CatalogResponse {
+  products: Array<{ id: string; slug: string; name: string; type: string; catalog_state: string }>;
+}
+
+let detail: DetailResponse | null = null;
+let grants: Grant[] = [];
+let catalog: CatalogOption[] = [];
+let loadError: string | null = null;
+
+try {
+  const [detailRes, grantRes, catalogRes] = await Promise.all([
+    adminGet<DetailResponse>(ctx, `/organizations/${orgId}`),
+    adminGet<{ grants: Grant[] }>(ctx, `/tenancy/organizations/${orgId}/grants`),
+    adminGet<CatalogResponse>(ctx, '/catalog/products'),
+  ]);
+  detail = detailRes;
+  grants = grantRes.grants;
+
+  // The catalog list has no plans on it; fetch each product's plans so the
+  // grant and license pickers can offer real options rather than free text.
+  const usable = catalogRes.products.filter((p) => p.catalog_state !== 'retired');
+  catalog = await Promise.all(
+    usable.map(async (product) => {
+      const full = await adminGet<{ plans: Array<{ slug: string; status: string }> }>(
+        ctx,
+        `/catalog/products/${product.id}`
+      );
+      return {
+        slug: product.slug,
+        name: product.name,
+        type: product.type,
+        plans: full.plans.filter((pl) => pl.status === 'active').map((pl) => pl.slug),
+      };
+    })
+  );
+} catch (err) {
+  loadError = err instanceof Error ? err.message : 'Could not load this organization';
+}
+---
+
+<AdminLayout title={detail ? detail.organization.name : 'Organization'} active="organizations">
+  <div class="mb-6">
+    <a href="/organizations" class="text-xs text-muted hover:text-white">← Organizations</a>
+    <h1 class="text-xl font-semibold tracking-tight mt-1">{detail ? detail.organization.name : 'Organization'}</h1>
+    {detail && <p class="text-sm text-muted mt-1"><code class="font-mono">{detail.organization.id}</code></p>}
+  </div>
+
+  {loadError && <p class="text-sm text-red-300">{loadError}</p>}
+
+  {
+    detail && (
+      <>
+        <OrgManager
+          client:load
+          organization={detail.organization}
+          grants={grants}
+          members={detail.members}
+          catalog={catalog.map(({ slug, name, plans }) => ({ slug, name, plans }))}
+        />
+
+        <IssueLicense
+          client:load
+          organizationId={detail.organization.id}
+          organizationName={detail.organization.name}
+          catalog={catalog}
+        />
+
+        <section class="bg-surface border border-border rounded-xl shadow-card mb-6">
+          <header class="px-4 py-3 border-b border-border">
+            <h2 class="text-sm font-semibold">Licenses</h2>
+            <p class="text-[12px] text-muted mt-0.5">Open one to change its plan, seats, or expiry.</p>
+          </header>
+          <div class="p-4">
+            {detail.licenses.length === 0 ? (
+              <p class="text-[13px] text-muted">No licenses.</p>
+            ) : (
+              <ul class="space-y-1">
+                {detail.licenses.map((license) => (
+                  <li class="flex items-center justify-between text-[13px] py-1">
+                    <span>
+                      <a href={`/licenses/${license.id}`} class="font-mono text-[12px] text-[#A1A1A1] hover:text-accent">
+                        {license.key_mask}
+                      </a>
+                      <span class="text-muted ml-2">{license.product}</span>
+                    </span>
+                    <span class="text-muted">
+                      {license.status} · {license.expires_at ? shortDate(license.expires_at) : 'perpetual'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      </>
+    )
+  }
+</AdminLayout>

@@ -1,5 +1,7 @@
 ---
 import '../styles/global.css';
+import StepUpBadge from '../components/StepUpBadge.tsx';
+import { adminContext, adminGet } from '../lib/api';
 
 interface Props {
   title: string;
@@ -8,10 +10,23 @@ interface Props {
 
 const { title, active } = Astro.props;
 
+// Read the operator's elevated-window state server-side so the badge renders
+// correct on first paint instead of flashing "locked".
+let stepUpExpiresAt: string | null = null;
+try {
+  const status = await adminGet<{ active: boolean; expires_at: string | null }>(adminContext(Astro), '/step-up');
+  stepUpExpiresAt = status.active ? status.expires_at : null;
+} catch {
+  // The badge is informational; a failure here must never blank the page.
+  stepUpExpiresAt = null;
+}
+
 const NAV = [
   { href: '/', key: 'dashboard', label: 'Dashboard' },
   { href: '/customers', key: 'customers', label: 'Customers' },
   { href: '/organizations', key: 'organizations', label: 'Organizations' },
+  { href: '/catalog', key: 'catalog', label: 'Catalog' },
+  { href: '/users', key: 'users', label: 'Users' },
   { href: '/licenses', key: 'licenses', label: 'Licenses' },
   { href: '/subscriptions', key: 'subscriptions', label: 'Subscriptions' },
   { href: '/invoices', key: 'invoices', label: 'Invoices' },
@@ -66,7 +81,10 @@ const NAV = [
         </p>
       </aside>
       <main class="flex-1 min-w-0 px-6 py-6 max-w-6xl">
-        <div class="flex justify-end mb-4"><a href="/logout" class="text-xs text-muted hover:text-white">Sign out</a></div>
+        <div class="flex justify-end items-center gap-4 mb-4">
+          <StepUpBadge client:load initialExpiresAt={stepUpExpiresAt} />
+          <a href="/logout" class="text-xs text-muted hover:text-white">Sign out</a>
+        </div>
         <slot />
       </main>
     </div>

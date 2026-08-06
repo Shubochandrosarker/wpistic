@@ -43,12 +43,16 @@ JOIN plans pl ON pl.product_id = p.id AND pl.slug = 'free'
 JOIN features f ON f.product_id = p.id AND f.key = p.slug || '.sites.max'
 ON CONFLICT (plan_id, feature_id) DO NOTHING;
 
+-- Free-claimable products. The join to the `free` plan is what makes this
+-- correct *and* what makes it silently skip anything without one — which is
+-- why ffl-checkout, tripistic, and wpagentistic are handled separately below
+-- rather than with a CASE branch in here that could never be reached.
 UPDATE products p
-SET catalog_state = CASE WHEN p.slug = 'ffl-checkout' THEN 'coming_soon' ELSE 'live' END,
-    acquisition_mode = CASE WHEN p.slug = 'ffl-checkout' THEN 'compliance_hold' ELSE 'free_claim' END,
-    compliance_hold = (p.slug = 'ffl-checkout'),
+SET catalog_state = 'live',
+    acquisition_mode = 'free_claim',
+    compliance_hold = FALSE,
     public_visibility = TRUE,
-    free_plan_id = CASE WHEN p.slug = 'ffl-checkout' THEN NULL ELSE pl.id END,
+    free_plan_id = pl.id,
     free_limits = CASE p.slug
       WHEN 'memberistic' THEN '{"sites":1,"members":100}'::jsonb
       WHEN 'insightistic' THEN '{"sites":1,"reporting_days":30,"ai_insights_monthly":25}'::jsonb
@@ -64,8 +68,35 @@ SET catalog_state = CASE WHEN p.slug = 'ffl-checkout' THEN 'coming_soon' ELSE 'l
       WHEN 'mailistic' THEN '{"contacts":250,"sends_monthly":500,"consent_required":true}'::jsonb
       WHEN 'verifyistic' THEN '{"workflows":1,"submissions_monthly":100}'::jsonb
       WHEN 'seoistic' THEN '{"sites":1,"ai_monthly":25}'::jsonb
-      WHEN 'ffl-checkout' THEN '{}'::jsonb
       ELSE p.free_limits
     END
 FROM plans pl
 WHERE pl.product_id = p.id AND pl.slug = 'free';
+
+-- ---------------------------------------------------------------------------
+-- Products with no free plan. These cannot be reached by the join above, so
+-- they are set explicitly. Migration 014 carries the same corrections for
+-- databases seeded before it existed; on a fresh database these are the ones
+-- that actually take effect, because seeds run after every migration.
+-- ---------------------------------------------------------------------------
+
+-- Regulated commerce: visible in the catalog as coming soon, acquirable by
+-- nobody, and holding no free plan to hand out.
+UPDATE products
+SET catalog_state = 'coming_soon',
+    acquisition_mode = 'compliance_hold',
+    compliance_hold = TRUE,
+    public_visibility = TRUE,
+    free_plan_id = NULL,
+    free_limits = '{}'::jsonb
+WHERE slug = 'ffl-checkout';
+
+-- Historical products from the pre-launch seed, kept for referential integrity
+-- with any existing rows but out of the public catalog entirely.
+UPDATE products
+SET catalog_state = 'retired',
+    acquisition_mode = 'paid',
+    compliance_hold = FALSE,
+    public_visibility = FALSE,
+    free_plan_id = NULL
+WHERE slug IN ('tripistic', 'wpagentistic');

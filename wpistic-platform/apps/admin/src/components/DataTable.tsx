@@ -1,8 +1,13 @@
 /**
  * Interactive data table island: client-side text search, column sort, and
  * optional row actions posted through the same-origin admin proxy.
+ *
+ * Every action declared here is irreversible (suspend, revoke, cancel), so
+ * they all demand a fresh code for that specific action rather than riding the
+ * step-up window. Routine editing lives on the dedicated management screens.
  */
 import { useMemo, useState } from 'react';
+import { adminCall, describeError } from '../lib/client';
 
 export interface Column {
   key: string;
@@ -40,11 +45,14 @@ export default function DataTable({
   rows,
   actions = [],
   searchable = true,
+  rowHref,
 }: {
   columns: Column[];
   rows: Array<Record<string, unknown>>;
   actions?: RowAction[];
   searchable?: boolean;
+  /** e.g. "/organizations/{id}" — turns the first column into a detail link. */
+  rowHref?: string;
 }) {
   const [query, setQuery] = useState('');
   const [sortKey, setSortKey] = useState<string | null>(null);
@@ -70,29 +78,18 @@ export default function DataTable({
   const runAction = async (action: RowAction, row: Record<string, unknown>) => {
     const id = String(row.id ?? '');
     if (action.confirm && !window.confirm(action.confirm)) return;
-    let reason: string | undefined;
-    if (action.requireReason) {
-      reason = window.prompt('Reason (recorded in the audit log):') ?? undefined;
-      if (!reason || reason.trim().length < 3) return;
-    }
-    const mfaCode = window.prompt('Fresh authenticator code (required for this staff action):') ?? '';
-    if (!/^\d{6,10}$/.test(mfaCode)) return;
     setBusy(`${action.label}:${id}`);
     setMessage(null);
     try {
-      const res = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          endpoint: action.endpoint.replace('{id}', id),
-          body: { ...(action.body ?? {}), ...(reason ? { reason } : {}), mfa_code: mfaCode },
-        }),
+      await adminCall(action.endpoint.replace('{id}', id), {
+        body: action.body,
+        mfa: true,
+        reason: action.requireReason ? action.label : undefined,
       });
-      const json = (await res.json()) as { error?: { message?: string } };
-      if (!res.ok) throw new Error(json.error?.message ?? 'Action failed');
       setMessage(`${action.label} — done. Reload to see fresh data.`);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Action failed');
+      // A dismissed prompt is a deliberate no-op, not a failure to report.
+      setMessage(describeError(err));
     } finally {
       setBusy(null);
     }
@@ -147,9 +144,10 @@ export default function DataTable({
             )}
             {filtered.map((row, i) => (
               <tr key={String(row.id ?? i)} className="hover:bg-surface-hover/50 transition-colors">
-                {columns.map((col) => {
+                {columns.map((col, colIndex) => {
                   const value = row[col.key];
                   const text = value === null || value === undefined ? '—' : String(value);
+                  const linkable = rowHref && colIndex === 0 && row.id;
                   return (
                     <td key={col.key} className="px-4 py-2.5 align-middle whitespace-nowrap">
                       {col.badge ? (
@@ -160,6 +158,13 @@ export default function DataTable({
                         >
                           {text.replace(/_/g, ' ')}
                         </span>
+                      ) : linkable ? (
+                        <a
+                          href={rowHref.replace('{id}', String(row.id))}
+                          className={`hover:text-accent ${col.mono ? 'font-mono text-[12px] text-[#A1A1A1]' : 'text-[13px] text-white'}`}
+                        >
+                          {text}
+                        </a>
                       ) : (
                         <span className={col.mono ? 'font-mono text-[12px] text-[#A1A1A1]' : 'text-[13px]'}>{text}</span>
                       )}

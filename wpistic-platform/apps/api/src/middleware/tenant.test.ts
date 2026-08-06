@@ -1,7 +1,12 @@
 /**
- * Tests for tenant isolation: membership enforcement, API-key org binding,
- * and that the RLS safety-net (app.current_org_id) is actually set per
- * request — the wiring that was previously missing entirely.
+ * Tests for tenant isolation: path-vs-header org resolution, membership
+ * enforcement, API-key org binding, and impersonation scoping.
+ *
+ * Note what is NOT covered here, because it is not wired: the Row Level
+ * Security policies from migration 0010 are inert. `withOrg()` in db.ts is the
+ * only code that sets `app.current_org_id`, and it has no call sites, so
+ * `app_current_org_id()` is NULL on every request. Isolation currently rests
+ * entirely on the explicit organization_id predicates these tests do cover.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { injectOrgContext, requireOrg, requireRole } from './tenant';

@@ -1,0 +1,18 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import CatalogManager, { type CatalogProduct } from '../../components/CatalogManager.tsx';
+import { adminContext, adminGet } from '../../lib/api';
+
+const data = await adminGet<{ products: CatalogProduct[] }>(adminContext(Astro), '/catalog/products');
+---
+
+<AdminLayout title="Catalog" active="catalog">
+  <div class="mb-6">
+    <h1 class="text-xl font-semibold tracking-tight">Catalog</h1>
+    <p class="text-sm text-muted mt-1">
+      Products, their plans, and the entitlements each plan grants. Changes here decide what every customer can
+      acquire and what every installed plugin is allowed to do.
+    </p>
+  </div>
+  <CatalogManager client:load products={data.products} />
+</AdminLayout>

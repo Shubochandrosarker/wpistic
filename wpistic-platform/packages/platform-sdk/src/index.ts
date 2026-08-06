@@ -165,11 +165,19 @@ export class PlatformClient {
       products: Array<ProductView & { plan: string | null; status: string; source: 'subscription' | 'license' | 'access_grant' | null }>;
     }>(`/organizations/${orgId}/products`);
   }
+  /**
+   * Claim a free product. For plugin products the response carries a freshly
+   * minted `license` whose `license_key` is returned **exactly once** — store
+   * or show it immediately, because only its hash is kept server-side. A
+   * repeated claim is idempotent: `repeated` is true, `license` is null, and
+   * `existing_license` identifies the key already held (by mask only).
+   */
   claimFreeProduct(orgId: string, slug: string, limit_overrides: Record<string, unknown> = {}) {
     return this.request<{
       claim: { id: string; product: string; limits: Record<string, unknown>; status: string; created_at: string };
       repeated: boolean;
-      license: null;
+      license: { license_id: string; license_key: string; key_mask: string } | null;
+      existing_license: { id: string; key_mask: string } | null;
     }>(`/organizations/${orgId}/products/${encodeURIComponent(slug)}/claim`, {
       method: 'POST',
       headers: { 'X-Idempotency-Key': crypto.randomUUID() },

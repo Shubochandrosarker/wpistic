@@ -104,6 +104,7 @@ const list = detail ? null : await adminGet<CustomersResponse>(ctx, '/customers?
         <h1 class="text-xl font-semibold tracking-tight mb-6">Organizations</h1>
         <DataTable
           client:load
+          rowHref="/organizations/{id}"
           columns={[
             { key: 'name', label: 'Name' },
             { key: 'slug', label: 'Slug', mono: true },
@@ -120,7 +121,9 @@ const list = detail ? null : await adminGet<CustomersResponse>(ctx, '/customers?
             created: shortDate(c.created_at),
           }))}
         />
-        <p class="text-[12px] text-muted mt-3">Open a detail view: /organizations?focus=&lt;org id&gt;</p>
+        <p class="text-[12px] text-muted mt-3">
+          Click an organization to manage its product access, members, and licenses.
+        </p>
       </div>
     )
   }

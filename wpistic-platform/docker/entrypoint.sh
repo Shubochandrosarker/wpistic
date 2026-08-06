@@ -73,6 +73,7 @@ case "$ROLE" in
       --var "DASHBOARD_URL:${DASHBOARD_URL}" \
       --var "STRIPE_PUBLISHABLE_KEY:${STRIPE_PUBLISHABLE_KEY:-}" \
       --var "ADMIN_EMAILS:${ADMIN_EMAILS}" \
+      --var "ADMIN_ROLES:${ADMIN_ROLES:-}" \
       "$@"
     ;;
 
