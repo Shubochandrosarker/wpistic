@@ -17,6 +17,13 @@ function secure(response: Response, environment: 'staging' | 'production'): Resp
 }
 
 export const onRequest = defineMiddleware(async (context, next) => {
+  // Self-hosted (Node adapter) shim: the Cloudflare adapter populates
+  // locals.runtime; under @astrojs/node it is absent, so surface process.env
+  // through the same shape. Middleware runs before every page and API route,
+  // so downstream `Astro.locals.runtime.env` reads keep working unchanged.
+  if (!context.locals.runtime) {
+    (context.locals as { runtime: unknown }).runtime = { env: process.env };
+  }
   const path = new URL(context.request.url).pathname;
   // Cloudflare supplies bindings through `locals.runtime.env`. The standalone
   // Node adapter does not, so expose process.env through the same interface.

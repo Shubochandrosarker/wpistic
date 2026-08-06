@@ -12,17 +12,21 @@ case "${1:-api}" in
     ;;
 
   dashboard)
+    # Customer dashboard SPA -- static files with an index.html fallback.
     exec node /app/dashboard-server.mjs
     ;;
 
   admin)
-    exec node /app/admin/server/entry.mjs
+    # Staff portal -- Astro SSR built with the @astrojs/node adapter
+    # (ASTRO_ADAPTER=node at build time; see apps/admin/astro.config.mjs).
+    HOST="${ADMIN_HOST:-0.0.0.0}" PORT="${ADMIN_PORT:-4321}" \
+      exec node /app/admin/server/entry.mjs
     ;;
 
   scheduler)
     # Exactly one of these per deployment. A second would not corrupt anything
-    # — the outbox uses FOR UPDATE SKIP LOCKED and the expiry sweep is
-    # idempotent — but the two would just contend for the same rows.
+    # -- the outbox uses FOR UPDATE SKIP LOCKED and the expiry sweep is
+    # idempotent -- but the two would just contend for the same rows.
     exec node /app/api/scheduler.mjs
     ;;
 
@@ -38,7 +42,7 @@ case "${1:-api}" in
     ;;
 
   *)
-    echo "Unknown role '$1' — expected api, account, dashboard, admin, scheduler, or migrate" >&2
+    echo "Unknown role '$1' -- expected api, account, dashboard, admin, scheduler, or migrate" >&2
     exit 64
     ;;
 esac
