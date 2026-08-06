@@ -89,6 +89,34 @@ services:
       retries: 5
       start_period: 20s
 
+  dashboard:
+    <<: *app
+    container_name: wpistic-dashboard
+    command: ['dashboard']
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:8080/healthz || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  admin:
+    <<: *app
+    container_name: wpistic-admin
+    command: ['admin']
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:4321/login || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
   # Replaces Cloudflare Cron Triggers: drains the transactional outbox,
   # reconciles expired licenses, and sweeps stale cache and rate-limit rows.
   # Run exactly one.
@@ -111,7 +139,8 @@ volumes:
 networks:
   wpistic:
     # Attach your existing cloudflared container to this network so it can
-    # reach the services by name (http://api:8787, http://account:8788).
+    # reach the services by name (api:8787, account:8788, dashboard:8080,
+    # admin:4321).
     # If cloudflared runs on a different compose project, declare this network
     # as `external: true` there and reference it by the name below.
     name: wpistic

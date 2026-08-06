@@ -1,5 +1,5 @@
 #!/bin/sh
-# Role dispatcher for the self-hosted image. One image, four roles.
+# Role dispatcher for the self-hosted image. One image, six roles.
 set -eu
 
 case "${1:-api}" in
@@ -9,6 +9,14 @@ case "${1:-api}" in
 
   account)
     exec node /app/account/server.mjs
+    ;;
+
+  dashboard)
+    exec node /app/dashboard-server.mjs
+    ;;
+
+  admin)
+    exec node /app/admin/server/entry.mjs
     ;;
 
   scheduler)
@@ -30,7 +38,7 @@ case "${1:-api}" in
     ;;
 
   *)
-    echo "Unknown role '$1' — expected api, account, scheduler, or migrate" >&2
+    echo "Unknown role '$1' — expected api, account, dashboard, admin, scheduler, or migrate" >&2
     exit 64
     ;;
 esac
