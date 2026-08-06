@@ -22,6 +22,8 @@ export interface SessionContext {
 export type Variables = {
   sql: Sql;
   session?: SessionContext;
+  /** Per-request CSP nonce for the inline <style>/<script> on the auth pages. */
+  cspNonce: string;
 };
 
 export type AppContext = { Bindings: Env; Variables: Variables };

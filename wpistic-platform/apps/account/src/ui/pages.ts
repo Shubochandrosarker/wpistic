@@ -37,7 +37,12 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function layout(title: string, accent: string, body: string): string {
+/**
+ * The nonce comes from the security-headers middleware and must appear on the
+ * inline <style> and <script> below, or the page's own CSP drops both.
+ */
+function layout(title: string, accent: string, nonce: string, body: string): string {
+  const nonceAttr = escapeHtml(nonce);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -45,7 +50,7 @@ function layout(title: string, accent: string, body: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>${escapeHtml(title)}</title>
-<style>
+<style nonce="${nonceAttr}">
   :root { --accent: ${accent}; }
   * { box-sizing: border-box; margin: 0; }
   body {
@@ -87,8 +92,14 @@ function layout(title: string, accent: string, body: string): string {
   .alt { text-align: center; margin-top: 22px; font-size: 13px; color: #6B6B6B; }
   .alt a { color: var(--accent); }
   #mfa-field { display: none; }
-  .check { display: flex; gap: 8px; align-items: center; font-size: 13px; color: #A1A1A1; }
+  /* margin:0 lives here rather than in a style attribute: a CSP nonce applies
+     to elements, never to attributes, so an inline one would be dropped. */
+  .check { display: flex; gap: 8px; align-items: center; font-size: 13px; color: #A1A1A1; margin: 0; }
   .check input { width: auto; }
+  .noscript {
+    background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.35);
+    color: #FCA5A5; border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-bottom: 8px;
+  }
 </style>
 </head>
 <body>
@@ -97,15 +108,21 @@ function layout(title: string, accent: string, body: string): string {
 </html>`;
 }
 
+/** These forms submit over fetch, so a dead button is the failure mode without JS. */
+const NOSCRIPT = '<noscript><p class="noscript">JavaScript is required to sign in to WPistic.</p></noscript>';
+
 export interface AuthPageOptions {
   client: OAuthClientRow | null;
   continueUrl: string;
   mode: 'login' | 'register';
+  /** CSP nonce for the page's inline <style> and <script>. */
+  nonce: string;
 }
 
 export function renderLoginPage(options: AuthPageOptions): string {
   const brand = brandingFor(options.client);
   const continueAttr = escapeHtml(options.continueUrl);
+  const nonceAttr = escapeHtml(options.nonce);
   const registerHref = `/register?${new URLSearchParams({
     client: options.client?.client_id ?? 'wpistic_dashboard',
     continue: options.continueUrl,
@@ -114,10 +131,12 @@ export function renderLoginPage(options: AuthPageOptions): string {
   return layout(
     `Sign in to ${brand.displayName}`,
     brand.accent,
+    options.nonce,
     `
 <div class="mark">${escapeHtml(brand.displayName.charAt(0))}</div>
 <h1>Sign in to ${escapeHtml(brand.displayName)}</h1>
 <p class="sub">One WPistic account for the whole ecosystem.</p>
+${NOSCRIPT}
 <div class="error" id="error"></div>
 <form id="form" data-continue="${continueAttr}">
   <label for="email">Email</label>
@@ -129,13 +148,13 @@ export function renderLoginPage(options: AuthPageOptions): string {
     <input id="mfa" name="mfa_code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456">
   </div>
   <div class="row">
-    <label class="check" style="margin:0"><input type="checkbox" name="remember_me"> Remember me</label>
+    <label class="check"><input type="checkbox" name="remember_me"> Remember me</label>
     <a href="/reset">Forgot password?</a>
   </div>
   <button type="submit" id="submit">Sign in</button>
 </form>
 <p class="alt">New here? <a href="${registerHref}">Create your account</a></p>
-<script>
+<script nonce="${nonceAttr}">
 (function () {
   var form = document.getElementById('form');
   var errorBox = document.getElementById('error');
@@ -180,6 +199,7 @@ export function renderLoginPage(options: AuthPageOptions): string {
 export function renderRegisterPage(options: AuthPageOptions): string {
   const brand = brandingFor(options.client);
   const continueAttr = escapeHtml(options.continueUrl);
+  const nonceAttr = escapeHtml(options.nonce);
   const loginHref = `/login?${new URLSearchParams({
     client: options.client?.client_id ?? 'wpistic_dashboard',
     continue: options.continueUrl,
@@ -188,10 +208,12 @@ export function renderRegisterPage(options: AuthPageOptions): string {
   return layout(
     `Create your ${brand.displayName} account`,
     brand.accent,
+    options.nonce,
     `
 <div class="mark">${escapeHtml(brand.displayName.charAt(0))}</div>
 <h1>Create your account</h1>
 <p class="sub">Sign up once, use every WPistic product.</p>
+${NOSCRIPT}
 <div class="error" id="error"></div>
 <form id="form" data-continue="${continueAttr}">
   <label for="first_name">First name</label>
@@ -207,7 +229,7 @@ export function renderRegisterPage(options: AuthPageOptions): string {
   <button type="submit" id="submit">Create account</button>
 </form>
 <p class="alt">Already have an account? <a href="${loginHref}">Sign in</a></p>
-<script>
+<script nonce="${nonceAttr}">
 (function () {
   var form = document.getElementById('form');
   var errorBox = document.getElementById('error');
@@ -242,7 +264,8 @@ export function renderRegisterPage(options: AuthPageOptions): string {
   );
 }
 
-export function renderResetPage(accent = '#C9A961', token: string | null = null): string {
+export function renderResetPage(nonce: string, accent = '#C9A961', token: string | null = null): string {
+  const nonceAttr = escapeHtml(nonce);
   const requestForm = `
 <h1>Reset your password</h1>
 <p class="sub">We'll email you a reset link.</p>
@@ -266,11 +289,13 @@ export function renderResetPage(accent = '#C9A961', token: string | null = null)
   return layout(
     'Reset password — WPistic',
     accent,
+    nonce,
     `
 <div class="mark">W</div>
+${NOSCRIPT}
 ${token ? confirmForm : requestForm}
 <p class="alt"><a href="/login">Back to sign in</a></p>
-<script>
+<script nonce="${nonceAttr}">
 (function () {
   var form = document.getElementById('form');
   var errorBox = document.getElementById('error');

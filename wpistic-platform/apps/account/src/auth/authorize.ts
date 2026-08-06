@@ -86,6 +86,7 @@ export async function handleAuthorize(c: Context<AppContext>) {
         client,
         continueUrl: c.req.url,
         mode: 'login',
+        nonce: c.get('cspNonce'),
       })
     );
   }
@@ -93,7 +94,7 @@ export async function handleAuthorize(c: Context<AppContext>) {
   const session = c.get('session')!;
   const user = await findUserById(sql, session.userId);
   if (!user || user.status !== 'active') {
-    return c.html(renderLoginPage({ client, continueUrl: c.req.url, mode: 'login' }));
+    return c.html(renderLoginPage({ client, continueUrl: c.req.url, mode: 'login', nonce: c.get('cspNonce') }));
   }
 
   // Resolve current organization for the org_id claim downstream.
