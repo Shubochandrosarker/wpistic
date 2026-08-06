@@ -69,7 +69,7 @@ npm run vps:ps
 npm run vps:logs
 ```
 
-Four containers plus a one-shot migrate job. **None publishes a port to the
+Six containers plus a one-shot migrate job. **None publishes a port to the
 host** — that is deliberate, see §7.
 
 ### Point the tunnel at it
@@ -87,8 +87,8 @@ Then map the hostnames in your tunnel's ingress:
 |---|---|
 | `api.example.com` | `http://api:8787` |
 | `account.example.com` | `http://account:8788` |
-| `app.example.com` | the dashboard SPA — see below |
-| `admin.example.com` | the admin portal — see below |
+| `app.example.com` | `http://dashboard:8080` |
+| `admin.example.com` | `http://admin:4321` |
 
 If `cloudflared` runs in its own compose project, declare the network there:
 
@@ -100,18 +100,17 @@ networks:
 
 ### The two front ends
 
-`api` and `account` are servers and are handled above. The other two are not:
+Both are now first-class services in `docker-compose.vps.yml`:
 
-- **`app.` (customer dashboard)** is a static SPA. `docker/Dockerfile.node`
-  builds it to `/app/dashboard` inside the image. Serve that directory with any
-  static host, and make sure unknown paths fall back to `index.html` — the SPA
-  routes client-side, and without that fallback a refresh on `/licenses`
-  returns 404.
-- **`admin.` (staff portal)** is Astro SSR currently built for the Cloudflare
-  adapter. To self-host it, switch `apps/admin/astro.config.mjs` to
-  `@astrojs/node` and run `node ./dist/server/entry.mjs`. Until you do, the
-  admin portal is the one piece that still needs Cloudflare — everything else
-  runs on your VPS today.
+- **`app.` (customer dashboard)** is a static SPA. The image builds it to
+  `/app/dashboard` and the `dashboard` role serves it with
+  `docker/static-server.mjs` — index.html fallback included, so a refresh on
+  `/licenses` works. Tunnel it to `http://dashboard:8080`.
+- **`admin.` (staff portal)** is Astro SSR. The image builds it with
+  `ASTRO_ADAPTER=node` (`@astrojs/node`, standalone) and the `admin` role runs
+  `node /app/admin/server/entry.mjs`. A middleware shim maps
+  `locals.runtime.env` to `process.env`, so the same code serves both targets.
+  Tunnel it to `http://admin:4321`. Nothing needs Cloudflare Workers anymore.
 
 ---
 

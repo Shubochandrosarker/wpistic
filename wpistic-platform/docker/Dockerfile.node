@@ -1,8 +1,8 @@
 # Self-hosted image for the WPistic control plane.
 #
-# One image, four roles, chosen by the command: `api`, `account`, `scheduler`,
-# `migrate`. Keeping them in one image means one build and one thing to keep
-# patched, and the entry points are a few hundred kilobytes each.
+# One image, six roles, chosen by the command: `api`, `account`, `dashboard`,
+# `admin`, `scheduler`, `migrate`. Keeping them in one image means one build
+# and one thing to keep patched.
 #
 # Two stages. The builder installs the full workspace and bundles each entry
 # point into a single .mjs with esbuild; the runtime carries only those bundles.
@@ -39,6 +39,15 @@ RUN npm --workspace @wpistic/api     run build:node \
 # web server for a directory of files.
 RUN npm --workspace @wpistic/dashboard run build
 
+# The admin portal, built for plain Node instead of the Cloudflare adapter.
+# Its SSR output bundles everything except `astro`, `react`, and `react-dom`,
+# so a minimal runtime install (pinned to the workspace lockfile versions)
+# is prepared here and copied next to the dist in the runtime stage.
+RUN ASTRO_ADAPTER=node npm --workspace @wpistic/admin run build
+RUN mkdir /admin-runtime && cd /admin-runtime \
+ && node -e "const l=require('/build/package-lock.json');const v=p=>l.packages['node_modules/'+p].version;require('fs').writeFileSync('package.json',JSON.stringify({name:'wpistic-admin-runtime',private:true,dependencies:{astro:v('astro'),react:v('react'),'react-dom':v('react-dom')}}))" \
+ && npm install --omit=dev --no-audit --no-fund
+
 # ---------------------------------------------------------------------------
 FROM node:22-alpine AS runtime
 WORKDIR /app
@@ -51,6 +60,9 @@ COPY --from=builder /build/apps/api/dist-node/server.mjs        ./api/server.mjs
 COPY --from=builder /build/apps/api/dist-node/scheduler.mjs     ./api/scheduler.mjs
 COPY --from=builder /build/apps/account/dist-node/server.mjs    ./account/server.mjs
 COPY --from=builder /build/apps/dashboard/dist                  ./dashboard
+COPY --from=builder /build/apps/admin/dist                      ./admin
+COPY --from=builder /admin-runtime/node_modules                 ./admin/node_modules
+COPY docker/static-server.mjs                                   ./dashboard-server.mjs
 COPY --from=builder /build/database                             ./database
 COPY --from=builder /build/node_modules/postgres                ./node_modules/postgres
 COPY docker/entrypoint.node.sh                                  ./entrypoint.sh

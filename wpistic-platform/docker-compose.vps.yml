@@ -89,6 +89,46 @@ services:
       retries: 5
       start_period: 20s
 
+  # Customer dashboard SPA — static files with an index.html fallback, served
+  # from inside the image. Tunnel target: http://dashboard:8080
+  dashboard:
+    <<: *app
+    container_name: wpistic-dashboard
+    command: ['dashboard']
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:8080/healthz || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Staff portal — Astro SSR on the @astrojs/node adapter.
+  # Tunnel target: http://admin:4321
+  admin:
+    <<: *app
+    container_name: wpistic-admin
+    command: ['admin']
+    environment:
+      ENVIRONMENT: production
+      # Server-side calls stay on the internal network; browser-facing URLs
+      # come from the PUBLIC_* values in .env.vps.
+      API_URL: http://api:8787
+      ACCOUNT_URL: http://account:8788
+      ADMIN_CLIENT_ID: ${ADMIN_CLIENT_ID:-wpistic_admin}
+      ADMIN_REDIRECT_URI: ${PUBLIC_ADMIN_URL}/auth/callback
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS -o /dev/null -w "%{http_code}" http://localhost:4321/login | grep -qE "^(200|302|303)$$"']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
   # Replaces Cloudflare Cron Triggers: drains the transactional outbox,
   # reconciles expired licenses, and sweeps stale cache and rate-limit rows.
   # Run exactly one.
@@ -111,7 +151,8 @@ volumes:
 networks:
   wpistic:
     # Attach your existing cloudflared container to this network so it can
-    # reach the services by name (http://api:8787, http://account:8788).
+    # reach the services by name (http://api:8787, http://account:8788,
+    # http://dashboard:8080, http://admin:4321).
     # If cloudflared runs on a different compose project, declare this network
     # as `external: true` there and reference it by the name below.
     name: wpistic

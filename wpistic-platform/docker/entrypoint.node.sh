@@ -1,5 +1,5 @@
 #!/bin/sh
-# Role dispatcher for the self-hosted image. One image, four roles.
+# Role dispatcher for the self-hosted image. One image, six roles.
 set -eu
 
 case "${1:-api}" in
@@ -18,6 +18,18 @@ case "${1:-api}" in
     exec node /app/api/scheduler.mjs
     ;;
 
+  dashboard)
+    # Customer dashboard SPA — static files with an index.html fallback.
+    exec node /app/dashboard-server.mjs
+    ;;
+
+  admin)
+    # Staff portal — Astro SSR built with the @astrojs/node adapter
+    # (ASTRO_ADAPTER=node at build time; see apps/admin/astro.config.mjs).
+    HOST="${ADMIN_HOST:-0.0.0.0}" PORT="${ADMIN_PORT:-4321}" \
+      exec node /app/admin/server/entry.mjs
+    ;;
+
   migrate)
     # Runs to completion and exits; compose gates the services on it.
     # Seeds are idempotent, so a redeploy re-applies them harmlessly and picks
@@ -30,7 +42,7 @@ case "${1:-api}" in
     ;;
 
   *)
-    echo "Unknown role '$1' — expected api, account, scheduler, or migrate" >&2
+    echo "Unknown role '$1' — expected api, account, dashboard, admin, scheduler, or migrate" >&2
     exit 64
     ;;
 esac
